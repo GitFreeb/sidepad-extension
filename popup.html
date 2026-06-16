@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Sidepad</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- Tab bar -->
+    <div class="tabbar">
+      <div class="tab-strip-wrap">
+        <div class="tab-strip" id="tabStrip"><!-- rendered by JS --></div>
+        <span class="tab-overflow-badge tab-overflow-left"  id="tabOverflowLeft"></span>
+        <span class="tab-overflow-badge tab-overflow-right" id="tabOverflow"></span>
+      </div>
+      <div class="tabbar-actions">
+        <button class="btn-auto-save" id="autoSaveBtn" title="Auto-save enabled">↓auto</button>
+        <button class="btn-lang"  id="langBtn"  title="Switch to English">RU</button>
+        <button class="btn-theme" id="themeBtn" title="Сменить тему">◐</button>
+      </div>
+    </div>
+
+    <!-- Status / breadcrumb -->
+    <div class="breadcrumb">
+      <span class="bc-path">~/tasks/</span><span class="bc-file" id="bcFile">task.md</span>
+      <span class="bc-sep">—</span>
+      <span class="counter" id="counter">0 / 0</span>
+    </div>
+
+    <!-- Add form -->
+    <div class="add-form">
+      <input type="text" id="sectionInput" class="input" placeholder="+ новая секция..." maxlength="80">
+      <input type="text" id="taskInput" class="input" placeholder="+ новая задача..." maxlength="120">
+      <input type="url"  id="linkInput" class="input url-input" placeholder="  url (необязательно)">
+      <div class="csel input" id="sectionSelect" tabindex="0">
+        <span class="csel-val" id="sectionSelectVal">Дополнительные задачи</span>
+        <span class="csel-arr">▾</span>
+        <ul class="csel-list" id="sectionSelectList"></ul>
+      </div>
+      <button id="addBtn" class="btn-add" title="Добавить (Enter)">+ добавить</button>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <button class="btn-upload" id="importBtn" title="Загрузить .md файл">↑ загрузить</button>
+      <button class="btn-export" id="exportBtn" title="Выгрузить .md файл">↓ выгрузить</button>
+      <button id="collapseAllBtn" class="btn-collapse-all">▸ свернуть все</button>
+      <button id="clearDoneBtn" class="btn-clear">✕ очистить</button>
+    </div>
+
+    <!-- Task list -->
+    <ul class="task-list" id="taskList"></ul>
+
+
+</div>
+  <div id="toast" class="toast"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
