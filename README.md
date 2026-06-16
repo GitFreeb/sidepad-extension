@@ -4,6 +4,8 @@ English version | [Русская версия → README.ru.md](README.ru.md)
 
 A Chrome side panel for managing task lists in Markdown format. Works as a native Side Panel — stays alongside the page without covering it.
 
+![Sidepad screenshot](screenshot.png)
+
 ---
 
 ## Table of Contents
