@@ -1,6 +1,6 @@
 # Sidepad
 
-[English version → README.en.md](README.en.md) | Русская версия
+[English version → README.md](README.md) | Русская версия
 
 Боковая панель Chrome для ведения списков задач в формате Markdown. Работает как нативный Side Panel — не перекрывает страницу, всегда под рукой.
 
