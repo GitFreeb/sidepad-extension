@@ -31,13 +31,23 @@
 
     <!-- Add form -->
     <div class="add-form">
-      <input type="text" id="sectionInput" class="input" placeholder="+ новая секция..." maxlength="80">
-      <input type="text" id="taskInput" class="input" placeholder="+ новая задача..." maxlength="120">
-      <input type="url"  id="linkInput" class="input url-input" placeholder="  url (необязательно)">
-      <div class="csel input" id="sectionSelect" tabindex="0">
-        <span class="csel-val" id="sectionSelectVal">Дополнительные задачи</span>
-        <span class="csel-arr">▾</span>
-        <ul class="csel-list" id="sectionSelectList"></ul>
+      <div class="add-form-group">
+        <div class="field">
+          <span class="field-icon">+</span>
+          <input type="text" id="sectionInput" class="input" placeholder="новая секция..." maxlength="80">
+        </div>
+        <div class="field">
+          <span class="field-icon">+</span>
+          <input type="text" id="taskInput" class="input" placeholder="новая задача..." maxlength="120">
+        </div>
+        <div class="field">
+          <input type="url"  id="linkInput" class="input url-input" placeholder="url (необязательно)">
+        </div>
+        <div class="csel input" id="sectionSelect" tabindex="0">
+          <span class="csel-val" id="sectionSelectVal">Дополнительные задачи</span>
+          <span class="csel-arr">▾</span>
+          <ul class="csel-list" id="sectionSelectList"></ul>
+        </div>
       </div>
       <button id="addBtn" class="btn-add" title="Добавить (Enter)">+ добавить</button>
     </div>

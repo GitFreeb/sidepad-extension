@@ -20,9 +20,9 @@ const I18N = {
     deleteSectionTitle: 'Удалить секцию',
     copyTitle:          'Копировать',
     deleteTitle:        'Удалить',
-    sectionPlaceholder: '+ новая секция...',
-    taskPlaceholder:    '+ новая задача...',
-    urlPlaceholder:     '  url (необязательно)',
+    sectionPlaceholder: 'новая секция...',
+    taskPlaceholder:    'новая задача...',
+    urlPlaceholder:     'url (необязательно)',
     addBtn:             '+ добавить',
     importBtn:          '↑ загрузить',
     exportBtn:          '↓ выгрузить',
@@ -50,9 +50,9 @@ const I18N = {
     deleteSectionTitle: 'Delete section',
     copyTitle:          'Copy',
     deleteTitle:        'Delete',
-    sectionPlaceholder: '+ new section...',
-    taskPlaceholder:    '+ new task...',
-    urlPlaceholder:     '  url (optional)',
+    sectionPlaceholder: 'new section...',
+    taskPlaceholder:    'new task...',
+    urlPlaceholder:     'url (optional)',
     addBtn:             '+ add',
     importBtn:          '↑ import',
     exportBtn:          '↓ export',
@@ -153,8 +153,8 @@ function updateTabOverflow() {
 
   let hiddenRight = 0, hiddenLeft = 0;
   strip.querySelectorAll('.tab').forEach(tab => {
-    if (tab.offsetLeft + tab.offsetWidth > visibleEnd + 2) hiddenRight++;
-    if (tab.offsetLeft < scrollLeft - 2)                   hiddenLeft++;
+    if (tab.offsetLeft >= visibleEnd - 2)                     hiddenRight++;
+    if (tab.offsetLeft + tab.offsetWidth <= scrollLeft + 2)   hiddenLeft++;
   });
 
   badgeR.textContent = `+${hiddenRight}`;
@@ -1141,6 +1141,16 @@ document.getElementById('sectionSelect').addEventListener('keydown', e => {
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#sectionSelect')) closeCsel();
   if (moveMenuTaskId !== null && !e.target.closest('.move-section-menu')) {
+    moveMenuTaskId = null;
+    render();
+  }
+});
+
+/* Клик за пределами side panel не порождает события в её document —
+   закрываем открытые меню по потере фокуса окном. */
+window.addEventListener('blur', () => {
+  closeCsel();
+  if (moveMenuTaskId !== null) {
     moveMenuTaskId = null;
     render();
   }
