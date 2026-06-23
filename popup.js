@@ -421,7 +421,7 @@ function parseMd(content, fileName) {
         const url = matches[0] ? matches[0].replace(/[),>]+$/, '') : '';
         const text = raw.replace(URL_RE, '').replace(/\s{2,}/g, ' ').trim() || raw;
         result.push({ id: id++, section, text, url, done });
-      } else if (!t.startsWith('|') && !t.startsWith('`') && !t.startsWith('!') && t.length < 120) {
+      } else if (!t.startsWith('|') && !t.startsWith('`') && !t.startsWith('!') && t.length < 240) {
         section = t.replace(/^#+\s*/, '').trim() || section;
       }
     }
@@ -454,7 +454,7 @@ function parseMd(content, fileName) {
       continue;
     }
 
-    if (t.startsWith('|') || t.startsWith('`') || t.startsWith('!') || t.length >= 120) continue;
+    if (t.startsWith('|') || t.startsWith('`') || t.startsWith('!') || t.length >= 240) continue;
 
     let raw = t;
 
@@ -783,7 +783,7 @@ function render() {
           <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''} draggable="false">
           <div class="task-content">
             ${isEditing
-              ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="120" draggable="false">`
+              ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="240" draggable="false">`
               : `<div class="task-text" data-action="edit-text">${escapeHtml(task.text)}</div>`}
             ${task.url
               ? `<a class="task-link" href="${escapeHtml(task.url)}" data-action="link" title="${escapeHtml(task.url)}" draggable="false">${escapeHtml(task.url)}</a>`
