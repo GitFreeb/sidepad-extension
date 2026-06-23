@@ -682,7 +682,6 @@ body {
 }
 
 .task-item.done .task-text {
-  text-decoration: line-through;
   color: var(--text-dim);
 }
 
