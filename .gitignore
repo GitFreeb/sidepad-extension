@@ -30,3 +30,4 @@ task.md
 
 # Рабочие артефакты Claude Code (планы/спеки, не часть расширения)
 docs/superpowers/
+.claude/worktrees/
