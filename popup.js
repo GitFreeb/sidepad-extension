@@ -132,13 +132,6 @@ function renderUpdateBanner() {
   const current = chrome.runtime.getManifest().version;
   const hasUpdate = compareVersions(updateInfo.latestVersion, current) > 0;
 
-  if (hasUpdate) {
-    chrome.action.setBadgeText({ text: '•' });
-    chrome.action.setBadgeBackgroundColor({ color: '#f0a93b' });
-  } else {
-    chrome.action.setBadgeText({ text: '' });
-  }
-
   const banner = document.getElementById('updateBanner');
   const showBanner = hasUpdate && updateInfo.latestVersion !== updateInfo.dismissedVersion;
   banner.hidden = !showBanner;
