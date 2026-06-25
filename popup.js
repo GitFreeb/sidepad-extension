@@ -1319,6 +1319,28 @@ window.addEventListener('blur', () => {
 (function () {
   const strip = document.getElementById('tabStrip');
 
+  const EDGE_ZONE     = 32; // px from strip edge that triggers auto-scroll
+  const SCROLL_SPEED  = 8;  // px per animation frame
+  let scrollRAF = null;
+  let scrollDir = 0; // -1 left, 0 stopped, 1 right
+
+  function autoScrollStep() {
+    strip.scrollLeft += scrollDir * SCROLL_SPEED;
+    scrollRAF = requestAnimationFrame(autoScrollStep);
+  }
+
+  function startAutoScroll(direction) {
+    if (scrollDir === direction) return;
+    scrollDir = direction;
+    if (!scrollRAF) scrollRAF = requestAnimationFrame(autoScrollStep);
+  }
+
+  function stopAutoScroll() {
+    if (scrollRAF) cancelAnimationFrame(scrollRAF);
+    scrollRAF = null;
+    scrollDir = 0;
+  }
+
   strip.addEventListener('dragstart', (e) => {
     const tabEl = e.target.closest('.tab');
     if (!tabEl) { e.preventDefault(); return; }
@@ -1337,12 +1359,23 @@ window.addEventListener('blur', () => {
       const r = tabEl.getBoundingClientRect();
       tabEl.classList.add(e.clientX < r.left + r.width / 2 ? 'drag-before' : 'drag-after');
     }
+
+    const stripRect = strip.getBoundingClientRect();
+    if (e.clientX < stripRect.left + EDGE_ZONE)       startAutoScroll(-1);
+    else if (e.clientX > stripRect.right - EDGE_ZONE) startAutoScroll(1);
+    else                                               stopAutoScroll();
+  });
+
+  strip.addEventListener('dragleave', (e) => {
+    if (dragType !== 'tab') return;
+    if (!strip.contains(e.relatedTarget)) stopAutoScroll();
   });
 
   strip.addEventListener('drop', (e) => {
     if (dragType !== 'tab') return;
     e.preventDefault();
     clearDragUI();
+    stopAutoScroll();
     const tabEl = e.target.closest('.tab');
     if (tabEl && tabEl.dataset.tabId !== dragId) {
       const r = tabEl.getBoundingClientRect();
@@ -1353,6 +1386,7 @@ window.addEventListener('blur', () => {
 
   strip.addEventListener('dragend', () => {
     clearDragUI();
+    stopAutoScroll();
     document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
     dragType = null; dragId = null;
   });
