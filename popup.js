@@ -1324,10 +1324,17 @@ window.addEventListener('blur', () => {
   let scrollRAF = null;
   let scrollDir = 0; // -1 left, 0 stopped, 1 right
 
-  // Transparent 1x1 image — suppresses the native drag ghost, which would
-  // otherwise float over the rest of the narrow side panel UI.
-  const TRANSPARENT_PX = new Image();
-  TRANSPARENT_PX.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  // Small custom drag image — the default browser ghost is a full-size
+  // snapshot of the tab and floats over the rest of the narrow side panel
+  // UI. The browser snapshots this element synchronously when passed to
+  // setDragImage, so it can be removed right after (next tick).
+  function makeDragGhost(name) {
+    const ghost = document.createElement('div');
+    ghost.className = 'tab-drag-ghost';
+    ghost.textContent = '✳ ' + name;
+    document.body.appendChild(ghost);
+    return ghost;
+  }
 
   function autoScrollStep() {
     strip.scrollLeft += scrollDir * SCROLL_SPEED;
@@ -1352,8 +1359,12 @@ window.addEventListener('blur', () => {
     dragType = 'tab';
     dragId   = tabEl.dataset.tabId;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setDragImage(TRANSPARENT_PX, 0, 0);
-    document.body.classList.add('tab-drag-active');
+
+    const name  = tabEl.querySelector('.tab-name')?.textContent || '';
+    const ghost = makeDragGhost(name);
+    e.dataTransfer.setDragImage(ghost, 14, 18);
+    setTimeout(() => ghost.remove(), 0);
+
     setTimeout(() => tabEl.classList.add('dragging'), 0);
   });
 
@@ -1378,16 +1389,13 @@ window.addEventListener('blur', () => {
     if (!strip.contains(e.relatedTarget)) stopAutoScroll();
   });
 
-  // Shared cleanup, called from both `drop` and `dragend`. `drop` must run
-  // it directly (not rely on the later `dragend`) because a successful
+  // Shared cleanup, called from both `drop` and `dragend` (a successful
   // move calls renderTabs(), which replaces #tabStrip's children — the
-  // original dragged node is then detached and its later `dragend` event
-  // can no longer bubble up to this listener, leaving state (notably the
-  // <body> cursor class) stuck.
+  // dragged node is detached before its `dragend` can bubble here, so
+  // `drop` must run this directly rather than rely on `dragend`).
   function endDrag() {
     clearDragUI();
     stopAutoScroll();
-    document.body.classList.remove('tab-drag-active');
     document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
     dragType = null; dragId = null;
   }

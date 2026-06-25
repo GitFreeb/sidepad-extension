@@ -956,16 +956,25 @@ body {
   border-color: var(--accent-dim);
 }
 
-.tab.dragging {
-  opacity: 0.5;
-  outline: 1px dashed var(--accent);
-  outline-offset: -3px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.35);
-}
+.tab.dragging { opacity: 0.35; }
 
-body.tab-drag-active,
-body.tab-drag-active * {
-  cursor: grabbing !important;
+.tab-drag-ghost {
+  position: fixed;
+  top: -999px;
+  left: -999px;
+  max-width: 160px;
+  padding: 6px 10px;
+  background: var(--tab-active);
+  color: var(--text);
+  border: 1px solid var(--border-accent);
+  border-radius: 6px;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+  pointer-events: none;
 }
 
 .tab.drag-before::before,
