@@ -593,6 +593,7 @@ function moveTaskToSection(sourceId, targetSection, pos = 'end') {
   }
   arr.splice(insertAt, 0, { ...srcTask, section: targetSection });
   tasks = arr;
+  if (!srcTask.done) collapsedSections.delete(targetSection);
   syncAutoCollapse(); saveTasks(); render();
 }
 
