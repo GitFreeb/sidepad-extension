@@ -1324,6 +1324,11 @@ window.addEventListener('blur', () => {
   let scrollRAF = null;
   let scrollDir = 0; // -1 left, 0 stopped, 1 right
 
+  // Transparent 1x1 image — suppresses the native drag ghost, which would
+  // otherwise float over the rest of the narrow side panel UI.
+  const TRANSPARENT_PX = new Image();
+  TRANSPARENT_PX.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+
   function autoScrollStep() {
     strip.scrollLeft += scrollDir * SCROLL_SPEED;
     scrollRAF = requestAnimationFrame(autoScrollStep);
@@ -1347,6 +1352,7 @@ window.addEventListener('blur', () => {
     dragType = 'tab';
     dragId   = tabEl.dataset.tabId;
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setDragImage(TRANSPARENT_PX, 0, 0);
     setTimeout(() => tabEl.classList.add('dragging'), 0);
   });
 
