@@ -1378,26 +1378,32 @@ window.addEventListener('blur', () => {
     if (!strip.contains(e.relatedTarget)) stopAutoScroll();
   });
 
-  strip.addEventListener('drop', (e) => {
-    if (dragType !== 'tab') return;
-    e.preventDefault();
-    clearDragUI();
-    stopAutoScroll();
-    const tabEl = e.target.closest('.tab');
-    if (tabEl && tabEl.dataset.tabId !== dragId) {
-      const r = tabEl.getBoundingClientRect();
-      moveTab(dragId, tabEl.dataset.tabId, e.clientX < r.left + r.width / 2 ? 'before' : 'after');
-    }
-    dragType = null; dragId = null;
-  });
-
-  strip.addEventListener('dragend', () => {
+  // Shared cleanup, called from both `drop` and `dragend`. `drop` must run
+  // it directly (not rely on the later `dragend`) because a successful
+  // move calls renderTabs(), which replaces #tabStrip's children — the
+  // original dragged node is then detached and its later `dragend` event
+  // can no longer bubble up to this listener, leaving state (notably the
+  // <body> cursor class) stuck.
+  function endDrag() {
     clearDragUI();
     stopAutoScroll();
     document.body.classList.remove('tab-drag-active');
     document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
     dragType = null; dragId = null;
+  }
+
+  strip.addEventListener('drop', (e) => {
+    if (dragType !== 'tab') return;
+    e.preventDefault();
+    const tabEl = e.target.closest('.tab');
+    if (tabEl && tabEl.dataset.tabId !== dragId) {
+      const r = tabEl.getBoundingClientRect();
+      moveTab(dragId, tabEl.dataset.tabId, e.clientX < r.left + r.width / 2 ? 'before' : 'after');
+    }
+    endDrag();
   });
+
+  strip.addEventListener('dragend', endDrag);
 })();
 
 /* ── Clear ── */
