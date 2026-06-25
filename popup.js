@@ -171,9 +171,11 @@ function applyLang(l, save = true) {
   const lb = document.getElementById('langBtn');
   lb.textContent = tr('langLabel');
   lb.title       = tr('langTitle');
+  document.getElementById('updateBannerClose').title = tr('updateBannerClose');
   if (save) {
     chrome.storage.local.set({ lang: l });
     render();
+    renderUpdateBanner();
   }
 }
 
@@ -1380,6 +1382,18 @@ document.getElementById('collapseAllBtn').addEventListener('click', () => {
   }
   updateCollapseBtn();
   render();
+});
+
+/* ── Update banner interactions ── */
+document.getElementById('updateBannerText').addEventListener('click', () => {
+  chrome.tabs.create({ url: REPO_URL });
+});
+
+document.getElementById('updateBannerClose').addEventListener('click', (e) => {
+  e.stopPropagation();
+  updateInfo.dismissedVersion = updateInfo.latestVersion;
+  chrome.storage.local.set({ updateInfo });
+  renderUpdateBanner();
 });
 
 /* ── Tab overflow indicator ── */
