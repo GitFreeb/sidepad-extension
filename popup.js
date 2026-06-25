@@ -32,6 +32,8 @@ const I18N = {
     themeTitle:         'Сменить тему',
     langTitle:          'Switch to English',
     langLabel:          'RU',
+    updateAvailable:      'Доступна версия {version} → Обновить',
+    updateBannerClose:    'Скрыть',
   },
   en: {
     selectSectionPlaceholder: 'Select section',
@@ -62,6 +64,8 @@ const I18N = {
     themeTitle:         'Switch theme',
     langTitle:          'Переключить на русский',
     langLabel:          'EN',
+    updateAvailable:      'Version {version} is available → Update',
+    updateBannerClose:    'Dismiss',
   },
 };
 
@@ -69,6 +73,73 @@ let lang = 'en';
 function tr(key) { return I18N[lang]?.[key] ?? key; }
 
 const LEGACY_DEFAULT_SECTIONS = new Set(['__default__', 'Дополнительные задачи', 'Extra tasks']);
+
+/* ── Update check ── */
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MANIFEST_RAW_URL = 'https://raw.githubusercontent.com/GitFreeb/sidepad-extension/main/manifest.json';
+const REPO_URL = 'https://github.com/GitFreeb/sidepad-extension';
+
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na !== nb) return na > nb ? 1 : -1;
+  }
+  return 0;
+}
+
+let updateInfo = {
+  lastChecked: 0,
+  latestVersion: chrome.runtime.getManifest().version,
+  dismissedVersion: '',
+};
+
+function checkForUpdate() {
+  chrome.storage.local.get(['updateInfo'], (data) => {
+    if (data.updateInfo) updateInfo = data.updateInfo;
+
+    const stale = Date.now() - (updateInfo.lastChecked || 0) > UPDATE_CHECK_INTERVAL_MS;
+    if (!stale) {
+      renderUpdateBanner();
+      return;
+    }
+
+    fetch(MANIFEST_RAW_URL)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('bad status'))))
+      .then((json) => {
+        const current = chrome.runtime.getManifest().version;
+        const remote  = String(json && json.version || '');
+        if (remote && compareVersions(remote, current) > 0) {
+          updateInfo.latestVersion = remote;
+        } else {
+          updateInfo.latestVersion = current;
+          updateInfo.dismissedVersion = '';
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        updateInfo.lastChecked = Date.now();
+        chrome.storage.local.set({ updateInfo });
+        renderUpdateBanner();
+      });
+  });
+}
+
+function renderUpdateBanner() {
+  const current = chrome.runtime.getManifest().version;
+  const hasUpdate = compareVersions(updateInfo.latestVersion, current) > 0;
+
+  const banner = document.getElementById('updateBanner');
+  const showBanner = hasUpdate && updateInfo.latestVersion !== updateInfo.dismissedVersion;
+  banner.hidden = !showBanner;
+  if (showBanner) {
+    document.getElementById('updateBannerText').textContent =
+      tr('updateAvailable').replace('{version}', updateInfo.latestVersion);
+  }
+}
 
 function getNextSectionName(existingSections) {
   const base = tr('autoSectionBase');
@@ -93,9 +164,11 @@ function applyLang(l, save = true) {
   const lb = document.getElementById('langBtn');
   lb.textContent = tr('langLabel');
   lb.title       = tr('langTitle');
+  document.getElementById('updateBannerClose').title = tr('updateBannerClose');
   if (save) {
     chrome.storage.local.set({ lang: l });
     render();
+    renderUpdateBanner();
   }
 }
 
@@ -363,6 +436,7 @@ function loadAll() {
     resetCollapsedState();
     renderTabs();
     render();
+    checkForUpdate();
   });
 }
 
@@ -1301,6 +1375,18 @@ document.getElementById('collapseAllBtn').addEventListener('click', () => {
   }
   updateCollapseBtn();
   render();
+});
+
+/* ── Update banner interactions ── */
+document.getElementById('updateBannerText').addEventListener('click', () => {
+  chrome.tabs.create({ url: REPO_URL });
+});
+
+document.getElementById('updateBannerClose').addEventListener('click', (e) => {
+  e.stopPropagation();
+  updateInfo.dismissedVersion = updateInfo.latestVersion;
+  chrome.storage.local.set({ updateInfo });
+  renderUpdateBanner();
 });
 
 /* ── Tab overflow indicator ── */
