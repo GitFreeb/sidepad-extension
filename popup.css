@@ -170,6 +170,7 @@ body {
   flex-shrink: 0;
   cursor: pointer;
   user-select: none;
+  position: relative;
   transition: background 0.15s, color 0.15s;
 }
 
@@ -954,6 +955,21 @@ body {
   background: var(--accent-glow);
   border-color: var(--accent-dim);
 }
+
+.tab.dragging { opacity: 0.35; }
+
+.tab.drag-before::before,
+.tab.drag-after::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  z-index: 10;
+}
+.tab.drag-before::before { left: -1px; }
+.tab.drag-after::after   { right: -1px; }
 
 .section-empty {
   padding: 5px 18px 7px 42px;

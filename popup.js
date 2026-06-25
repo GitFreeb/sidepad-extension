@@ -246,12 +246,13 @@ function renderTabs() {
     const slug = tab.title.toLowerCase().replace(/\s+/g, '-');
     const display = slug.endsWith('.md') ? slug : slug + '.md';
     const nameHtml = tab.id === renamingTabId
-      ? `<input class="tab-rename-input" data-rename-id="${escapeHtml(tab.id)}" value="${escapeHtml(tab.title)}" maxlength="60">`
+      ? `<input class="tab-rename-input" data-rename-id="${escapeHtml(tab.id)}" value="${escapeHtml(tab.title)}" maxlength="60" draggable="false">`
       : `<span class="tab-name">${escapeHtml(display)}</span>`;
-    return `<div class="tab${isActive ? ' active' : ''}" data-tab-id="${escapeHtml(tab.id)}">
+    const isRenaming = tab.id === renamingTabId;
+    return `<div class="tab${isActive ? ' active' : ''}" data-tab-id="${escapeHtml(tab.id)}" draggable="${isRenaming ? 'false' : 'true'}">
       <span class="tab-icon">✳</span>
       ${nameHtml}
-      <button class="tab-close" data-close-id="${escapeHtml(tab.id)}" title="${tr('tabCloseTitle')}">×</button>
+      <button class="tab-close" data-close-id="${escapeHtml(tab.id)}" title="${tr('tabCloseTitle')}" draggable="false">×</button>
     </div>`;
   }).join('');
 
@@ -682,6 +683,18 @@ function moveSection(sourceName, targetName, pos) {
   const newOrder = deriveSections(tasks);
   sections = [...newOrder, ...sections.filter(s => !newOrder.includes(s))];
   syncAutoCollapse(); saveTasks(); render();
+}
+
+function moveTab(sourceId, targetId, pos) {
+  if (sourceId === targetId) return;
+  const srcIdx = tabs.findIndex(t => t.id === sourceId);
+  if (srcIdx === -1) return;
+  const [srcTab] = tabs.splice(srcIdx, 1);
+  const tgtIdx = tabs.findIndex(t => t.id === targetId);
+  if (tgtIdx === -1) { tabs.splice(srcIdx, 0, srcTab); return; }
+  tabs.splice(pos === 'after' ? tgtIdx + 1 : tgtIdx, 0, srcTab);
+  saveAllTabs();
+  renderTabs();
 }
 
 /* ── Collapse state ── */
@@ -1296,6 +1309,49 @@ window.addEventListener('blur', () => {
   });
 
   list.addEventListener('dragend', () => {
+    clearDragUI();
+    document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+    dragType = null; dragId = null;
+  });
+})();
+
+/* ── Tab drag events ── */
+(function () {
+  const strip = document.getElementById('tabStrip');
+
+  strip.addEventListener('dragstart', (e) => {
+    const tabEl = e.target.closest('.tab');
+    if (!tabEl) { e.preventDefault(); return; }
+    dragType = 'tab';
+    dragId   = tabEl.dataset.tabId;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => tabEl.classList.add('dragging'), 0);
+  });
+
+  strip.addEventListener('dragover', (e) => {
+    if (dragType !== 'tab') return;
+    e.preventDefault();
+    clearDragUI();
+    const tabEl = e.target.closest('.tab');
+    if (tabEl && tabEl.dataset.tabId !== dragId) {
+      const r = tabEl.getBoundingClientRect();
+      tabEl.classList.add(e.clientX < r.left + r.width / 2 ? 'drag-before' : 'drag-after');
+    }
+  });
+
+  strip.addEventListener('drop', (e) => {
+    if (dragType !== 'tab') return;
+    e.preventDefault();
+    clearDragUI();
+    const tabEl = e.target.closest('.tab');
+    if (tabEl && tabEl.dataset.tabId !== dragId) {
+      const r = tabEl.getBoundingClientRect();
+      moveTab(dragId, tabEl.dataset.tabId, e.clientX < r.left + r.width / 2 ? 'before' : 'after');
+    }
+    dragType = null; dragId = null;
+  });
+
+  strip.addEventListener('dragend', () => {
     clearDragUI();
     document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
     dragType = null; dragId = null;
