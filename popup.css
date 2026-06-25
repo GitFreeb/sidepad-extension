@@ -956,7 +956,17 @@ body {
   border-color: var(--accent-dim);
 }
 
-.tab.dragging { opacity: 0.35; }
+.tab.dragging {
+  opacity: 0.5;
+  outline: 1px dashed var(--accent);
+  outline-offset: -3px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+}
+
+body.tab-drag-active,
+body.tab-drag-active * {
+  cursor: grabbing !important;
+}
 
 .tab.drag-before::before,
 .tab.drag-after::after {

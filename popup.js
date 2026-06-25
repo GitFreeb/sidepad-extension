@@ -1353,6 +1353,7 @@ window.addEventListener('blur', () => {
     dragId   = tabEl.dataset.tabId;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setDragImage(TRANSPARENT_PX, 0, 0);
+    document.body.classList.add('tab-drag-active');
     setTimeout(() => tabEl.classList.add('dragging'), 0);
   });
 
@@ -1393,6 +1394,7 @@ window.addEventListener('blur', () => {
   strip.addEventListener('dragend', () => {
     clearDragUI();
     stopAutoScroll();
+    document.body.classList.remove('tab-drag-active');
     document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
     dragType = null; dragId = null;
   });
