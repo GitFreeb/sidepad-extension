@@ -87,6 +87,47 @@ function compareVersions(a, b) {
   return 0;
 }
 
+let updateInfo = {
+  lastChecked: 0,
+  latestVersion: chrome.runtime.getManifest().version,
+  dismissedVersion: '',
+};
+
+function checkForUpdate() {
+  chrome.storage.local.get(['updateInfo'], (data) => {
+    if (data.updateInfo) updateInfo = data.updateInfo;
+
+    const stale = Date.now() - (updateInfo.lastChecked || 0) > UPDATE_CHECK_INTERVAL_MS;
+    if (!stale) {
+      renderUpdateBanner();
+      return;
+    }
+
+    fetch(MANIFEST_RAW_URL)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('bad status'))))
+      .then((json) => {
+        const current = chrome.runtime.getManifest().version;
+        const remote  = String(json && json.version || '');
+        if (remote && compareVersions(remote, current) > 0) {
+          updateInfo.latestVersion = remote;
+        } else {
+          updateInfo.latestVersion = current;
+          updateInfo.dismissedVersion = '';
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        updateInfo.lastChecked = Date.now();
+        chrome.storage.local.set({ updateInfo });
+        renderUpdateBanner();
+      });
+  });
+}
+
+function renderUpdateBanner() {
+  // implemented in Task 3
+}
+
 function getNextSectionName(existingSections) {
   const base = tr('autoSectionBase');
   let n = 1;
@@ -380,6 +421,7 @@ function loadAll() {
     resetCollapsedState();
     renderTabs();
     render();
+    checkForUpdate();
   });
 }
 
