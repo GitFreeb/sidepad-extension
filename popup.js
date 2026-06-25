@@ -70,6 +70,23 @@ function tr(key) { return I18N[lang]?.[key] ?? key; }
 
 const LEGACY_DEFAULT_SECTIONS = new Set(['__default__', 'Дополнительные задачи', 'Extra tasks']);
 
+/* ── Update check ── */
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MANIFEST_RAW_URL = 'https://raw.githubusercontent.com/GitFreeb/sidepad-extension/main/manifest.json';
+const REPO_URL = 'https://github.com/GitFreeb/sidepad-extension';
+
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na !== nb) return na > nb ? 1 : -1;
+  }
+  return 0;
+}
+
 function getNextSectionName(existingSections) {
   const base = tr('autoSectionBase');
   let n = 1;
