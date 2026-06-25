@@ -32,6 +32,8 @@ const I18N = {
     themeTitle:         'Сменить тему',
     langTitle:          'Switch to English',
     langLabel:          'RU',
+    updateAvailable:      'Доступна версия {version} → Обновить',
+    updateBannerClose:    'Скрыть',
   },
   en: {
     selectSectionPlaceholder: 'Select section',
@@ -62,6 +64,8 @@ const I18N = {
     themeTitle:         'Switch theme',
     langTitle:          'Переключить на русский',
     langLabel:          'EN',
+    updateAvailable:      'Version {version} is available → Update',
+    updateBannerClose:    'Dismiss',
   },
 };
 
@@ -125,7 +129,23 @@ function checkForUpdate() {
 }
 
 function renderUpdateBanner() {
-  // implemented in Task 3
+  const current = chrome.runtime.getManifest().version;
+  const hasUpdate = compareVersions(updateInfo.latestVersion, current) > 0;
+
+  if (hasUpdate) {
+    chrome.action.setBadgeText({ text: '•' });
+    chrome.action.setBadgeBackgroundColor({ color: '#f0a93b' });
+  } else {
+    chrome.action.setBadgeText({ text: '' });
+  }
+
+  const banner = document.getElementById('updateBanner');
+  const showBanner = hasUpdate && updateInfo.latestVersion !== updateInfo.dismissedVersion;
+  banner.hidden = !showBanner;
+  if (showBanner) {
+    document.getElementById('updateBannerText').textContent =
+      tr('updateAvailable').replace('{version}', updateInfo.latestVersion);
+  }
 }
 
 function getNextSectionName(existingSections) {

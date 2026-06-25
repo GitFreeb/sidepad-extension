@@ -312,6 +312,40 @@ body {
   color: var(--text-muted);
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--accent-glow);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.update-banner[hidden] { display: none; }
+
+.update-banner-text {
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.update-banner-text:hover { text-decoration: underline; }
+
+.update-banner-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.update-banner-close:hover { color: var(--text); }
+
 /* ── Breadcrumb / file path ── */
 .breadcrumb {
   display: flex;
