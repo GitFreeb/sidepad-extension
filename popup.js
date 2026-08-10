@@ -1031,6 +1031,9 @@ document.getElementById('taskList').addEventListener('click', (e) => {
         rest.splice(lastIdx + 1, 0, toggled);
         tasks = rest;
       }
+    } else {
+      const toggled = tasks.find(t => t.id === id);
+      tasks = [toggled, ...tasks.filter(t => t.id !== id)];
     }
     syncAutoCollapse();
     saveTasks();
