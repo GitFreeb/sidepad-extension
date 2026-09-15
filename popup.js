@@ -556,7 +556,49 @@ function parseMd(content, fileName) {
 /* ── File import ── */
 let lastFileHandle = null;
 
+function applyImportedFile(text, fileName) {
+  const imported = parseMd(text, fileName);
+  if (!imported.length) return;
+
+  const current = getActiveTab();
+  if (current) { current.tasks = tasks; current.sections = sections; }
+
+  const title = fileName.replace(/\.[^.]+$/, '');
+  const newSections = deriveSections(imported);
+  const newTab = { id: 'tab_' + Date.now(), title, tasks: imported, sections: newSections };
+  tabs.push(newTab);
+  activeTabId = newTab.id;
+  tasks    = imported;
+  sections = newSections;
+
+  // Close the empty default tab if other tabs now exist
+  const defaultIdx = tabs.findIndex(t => t.title === 'default' && t.id !== newTab.id);
+  if (defaultIdx !== -1) tabs.splice(defaultIdx, 1);
+
+  applyTitle(title);
+  resetCollapsedState();
+  editingId = null;
+  saveAllTabs();
+  renderTabs();
+  render();
+}
+
+// Brave отключает File System Access API по умолчанию (showOpenFilePicker
+// отсутствует), поэтому нужен fallback через input[type=file].
+const importFileInput = document.getElementById('importFileInput');
+
+importFileInput.addEventListener('change', async () => {
+  const file = importFileInput.files[0];
+  importFileInput.value = '';
+  if (!file) return;
+  applyImportedFile(await file.text(), file.name);
+});
+
 document.getElementById('importBtn').addEventListener('click', async () => {
+  if (!window.showOpenFilePicker) {
+    importFileInput.click();
+    return;
+  }
   try {
     const [handle] = await window.showOpenFilePicker({
       types: [{ description: 'Markdown / Text', accept: { 'text/plain': ['.md', '.txt'] } }],
@@ -564,30 +606,7 @@ document.getElementById('importBtn').addEventListener('click', async () => {
     });
     lastFileHandle = handle;
     const file = await handle.getFile();
-    const imported = parseMd(await file.text(), file.name);
-    if (!imported.length) return;
-
-    const current = getActiveTab();
-    if (current) { current.tasks = tasks; current.sections = sections; }
-
-    const title = file.name.replace(/\.[^.]+$/, '');
-    const newSections = deriveSections(imported);
-    const newTab = { id: 'tab_' + Date.now(), title, tasks: imported, sections: newSections };
-    tabs.push(newTab);
-    activeTabId = newTab.id;
-    tasks    = imported;
-    sections = newSections;
-
-    // Close the empty default tab if other tabs now exist
-    const defaultIdx = tabs.findIndex(t => t.title === 'default' && t.id !== newTab.id);
-    if (defaultIdx !== -1) tabs.splice(defaultIdx, 1);
-
-    applyTitle(title);
-    resetCollapsedState();
-    editingId = null;
-    saveAllTabs();
-    renderTabs();
-    render();
+    applyImportedFile(await file.text(), file.name);
   } catch (e) {
     if (e.name !== 'AbortError') console.error(e);
   }
@@ -619,6 +638,19 @@ function generateMd(taskList, titleStr) {
 
 document.getElementById('exportBtn').addEventListener('click', async () => {
   const filename = document.getElementById('bcFile').textContent || 'tasks.md';
+
+  // Brave отключает File System Access API по умолчанию (showSaveFilePicker
+  // отсутствует), поэтому нужен fallback через Blob + <a download>.
+  if (!window.showSaveFilePicker) {
+    const blob = new Blob([generateMd()], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const name = filename.replace(/\.md$/, '') + '.md';
+    const a    = Object.assign(document.createElement('a'), { href: url, download: name });
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
   try {
     const opts = {
       suggestedName: filename,
