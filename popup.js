@@ -761,6 +761,7 @@ async function pollTab(tabId) {
   const state = syncState.get(tabId);
   const tab   = tabs.find(t => t.id === tabId);
   if (!state || !tab) return;
+  if (tabId === activeTabId && (editingId !== null || renamingSection !== null || moveMenuTaskId !== null)) return;
   try {
     const file = await state.handle.getFile();
     if (file.lastModified === state.lastKnownMtime) return;
@@ -774,9 +775,12 @@ async function pollTab(tabId) {
       tasks    = tab.tasks;
       sections = tab.sections;
       resetCollapsedState();
-      // Не рвём активный inline-редактор задачи/секции ре-рендером —
-      // данные уже обновлены, DOM подтянет их на следующем render().
-      if (editingId === null && renamingSection === null && moveMenuTaskId === null) render();
+      // parseMd() не сохраняет id задач между раундами разбора markdown —
+      // применение чужого изменения во время правки осиротило бы editingId
+      // и saveEdit() молча потерял бы недописанную правку. Поэтому всё
+      // применение (не только render()) целиком откладывается до следующего
+      // опроса, когда пользователь уже не находится в режиме редактирования.
+      render();
     }
     saveAllTabs(); // не saveTasks() — иначе применение чужого изменения тут же спровоцирует запись обратно в файл
   } catch (e) {
