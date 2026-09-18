@@ -470,11 +470,42 @@ document.getElementById('langBtn').addEventListener('click', () => {
   applyLang(lang === 'ru' ? 'en' : 'ru');
 });
 
-document.getElementById('autoSaveBtn').addEventListener('click', () => {
+document.getElementById('autoSaveBtn').addEventListener('click', async () => {
   const tab = getActiveTab();
   if (!tab) return;
-  tab.autoSave = !tab.autoSave;
-  applyAutoSaveButton(tab);
+
+  if (tab.autoSave) {
+    tab.autoSave = false;
+    applyAutoSaveButton(tab);
+    return;
+  }
+
+  if (!window.showSaveFilePicker) {
+    tab.autoSave = true;
+    applyAutoSaveButton(tab);
+    return;
+  }
+
+  try {
+    let handle = await getStoredHandle(tab.id);
+    if (handle) {
+      const perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted' && await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
+        return;
+      }
+    } else {
+      handle = await window.showSaveFilePicker({
+        suggestedName: tab.title.replace(/\.md$/, '') + '.md',
+        types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
+        startIn: 'documents',
+      });
+      await setStoredHandle(tab.id, handle);
+    }
+    tab.autoSave = true;
+    applyAutoSaveButton(tab);
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+  }
 });
 
 /* ── Markdown parser ── */
