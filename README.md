@@ -304,7 +304,7 @@ If the File System Access API isn't available (Brave with the flag off — see [
 
 ### Auto-save
 
-Controlled by the **`↓auto`** button in the tab bar — per tab, not global. Every tab starts with `↓auto` off each time the panel opens, regardless of what it was set to before.
+Controlled by the **`↓auto`** button in the tab bar — per tab, not global. The state persists across collapsing/reopening the panel — the next time the panel opens, the extension tries to silently resume sync for every tab that had `↓auto` on.
 
 Clicking `↓auto` on:
 - A tab that already has a connected file — silently reconfirms access to it (may show a brief in-page permission prompt)
@@ -315,6 +315,10 @@ If the tab already has real tasks and the chosen file holds a *different* list, 
 Without a connected file, `↓auto` still saves on close/clear as a plain, non-timestamped `name.md` in Downloads.
 
 The `example` tab can never have `↓auto` turned on. The `default` tab still asks for confirmation before saving over an existing list.
+
+**Resuming after the panel closes.** The browser's file-access permission can occasionally expire without a way to silently renew it (the browser requires a click to ask again). When that happens, `↓auto` reopens in its *on* state but with a warning icon — `↓auto ⚠` — meaning "this was on, click once to reconfirm access and resume syncing." If the permission hadn't expired, sync resumes fully automatically, with no indicator at all.
+
+There are exactly three ways to turn auto-save off: clicking `↓auto` manually, closing the tab itself, or declining to reconfirm access in the `↓auto ⚠` scenario above. Simply collapsing or closing the extension panel does not turn it off.
 
 ---
 
@@ -403,7 +407,7 @@ All data is stored in `chrome.storage.local` — locally in the browser, with no
 }
 ```
 
-`autoSave` is per tab and is always reset to `false` when the panel loads — it doesn't persist across sessions.
+`autoSave` is per tab and persists across collapsing/reopening the panel (see [Auto-save](#auto-save)).
 
 Data is saved on every change and restored on the next panel open. Legacy data format (before tabs were introduced) automatically migrates on first open.
 
