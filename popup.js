@@ -803,24 +803,27 @@ async function pollTab(tabId) {
 async function startSync(tab, handle) {
   stopSync(tab.id);
   const state = { handle, pollTimer: null, writeTimer: null, lastKnownMtime: null };
+  let parsed;
   try {
-    const file    = await handle.getFile();
-    const parsed  = parseMd(await file.text(), tab.title);
-    tab.tasks     = parsed;
-    tab.sections  = deriveSections(parsed);
+    const file = await handle.getFile();
+    parsed = parseMd(await file.text(), tab.title);
     state.lastKnownMtime = file.lastModified;
   } catch (e) {
     console.error(e);
     return false;
   }
-  syncState.set(tab.id, state);
-  if (tab.id === activeTabId) {
-    tasks    = tab.tasks;
-    sections = tab.sections;
-    resetCollapsedState();
-    render();
+  if (parsed.length > 0) {
+    tab.tasks    = parsed;
+    tab.sections = deriveSections(parsed);
+    if (tab.id === activeTabId) {
+      tasks    = tab.tasks;
+      sections = tab.sections;
+      resetCollapsedState();
+      render();
+    }
+    saveAllTabs();
   }
-  saveAllTabs();
+  syncState.set(tab.id, state);
   state.pollTimer = setInterval(() => pollTab(tab.id), 2000);
   return true;
 }
@@ -871,13 +874,16 @@ document.getElementById('exportBtn').addEventListener('click', async () => {
     const handle = await window.showSaveFilePicker(opts);
     lastFileHandle = handle;
     await setStoredHandle(activeTabId, handle);
-    if (syncState.has(activeTabId)) {
-      const tab = getActiveTab();
-      if (tab) await startSync(tab, handle);
-    }
     const writable = await handle.createWritable();
     await writable.write(generateMd());
     await writable.close();
+    if (syncState.has(activeTabId)) {
+      const tab = getActiveTab();
+      if (tab && !(await startSync(tab, handle))) {
+        tab.autoSave = false;
+        applyAutoSaveButton(tab);
+      }
+    }
   } catch (e) {
     if (e.name !== 'AbortError') console.error(e);
   }
