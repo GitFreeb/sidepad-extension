@@ -496,9 +496,12 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
 
   try {
     let handle = await getStoredHandle(tab.id);
+    console.log('[sync] autoSaveBtn click: tab.id=%s stored handle=%s', tab.id, handle ? handle.name : '(none, will show picker)');
     if (handle) {
       const perm = await handle.queryPermission({ mode: 'readwrite' });
+      console.log('[sync] queryPermission =', perm);
       if (perm !== 'granted' && await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
+        console.log('[sync] permission denied, aborting activation');
         return;
       }
     } else {
@@ -507,14 +510,16 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
         types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
         startIn: 'documents',
       });
+      console.log('[sync] picked new file via showSaveFilePicker:', handle.name);
       await setStoredHandle(tab.id, handle);
     }
     const ok = await startSync(tab, handle);
+    console.log('[sync] startSync returned', ok);
     if (!ok) return;
     tab.autoSave = true;
     applyAutoSaveButton(tab);
   } catch (e) {
-    if (e.name !== 'AbortError') console.error(e);
+    if (e.name !== 'AbortError') console.error('[sync] autoSaveBtn click error:', e);
   }
 });
 
@@ -783,6 +788,7 @@ async function pollTab(tabId) {
   try {
     const file = await state.handle.getFile();
     if (file.lastModified === state.lastKnownMtime) return;
+    console.log('[sync] pollTab(%s): mtime changed %s -> %s, reading file', tabId, state.lastKnownMtime, file.lastModified);
 
     const text = await file.text();
     // Re-check: the user may have started editing/renaming/dragging during
@@ -791,9 +797,10 @@ async function pollTab(tabId) {
     // markdown — применение чужого изменения во время правки осиротило бы
     // editingId и saveEdit() молча потерял бы недописанную правку, а во
     // время drag сломало бы перетаскивание (render() отрывает узел от DOM).
-    if (busyEditing()) return;
+    if (busyEditing()) { console.log('[sync] pollTab(%s): busyEditing after I/O, deferring apply', tabId); return; }
 
     const parsed = parseMd(text, tab.title);
+    console.log('[sync] pollTab(%s): parsed %d tasks from file, text.length=%d, first 80 chars=%s', tabId, parsed.length, text.length, JSON.stringify(text.slice(0, 80)));
     tab.tasks    = parsed;
     tab.sections = deriveSections(parsed);
     state.lastKnownMtime = file.lastModified; // advance only after a successful apply
@@ -806,7 +813,7 @@ async function pollTab(tabId) {
     }
     saveAllTabs(); // не saveTasks() — иначе применение чужого изменения тут же спровоцирует запись обратно в файл
   } catch (e) {
-    console.error(e);
+    console.error('[sync] pollTab(%s) error:', tabId, e);
     if (e.name === 'NotFoundError' || e.name === 'NotAllowedError' || e.name === 'SecurityError') stopSyncWithAlert(tabId);
   }
 }
@@ -817,13 +824,16 @@ async function startSync(tab, handle) {
   let parsed;
   try {
     const file = await handle.getFile();
-    parsed = parseMd(await file.text(), tab.title);
+    const text = await file.text();
+    parsed = parseMd(text, tab.title);
+    console.log('[sync] startSync(%s, file=%s): read %d chars, parsed %d tasks, first 80 chars=%s', tab.id, handle.name, text.length, parsed.length, JSON.stringify(text.slice(0, 80)));
     state.lastKnownMtime = file.lastModified;
   } catch (e) {
-    console.error(e);
+    console.error('[sync] startSync(%s) error reading/parsing file:', tab.id, e);
     return false;
   }
   if (parsed.length > 0) {
+    console.log('[sync] startSync(%s): applying %d parsed tasks to tab (was %d)', tab.id, parsed.length, tab.tasks.length);
     tab.tasks    = parsed;
     tab.sections = deriveSections(parsed);
     if (tab.id === activeTabId) {
@@ -833,6 +843,8 @@ async function startSync(tab, handle) {
       render();
     }
     saveAllTabs();
+  } else {
+    console.log('[sync] startSync(%s): parsed file is empty, NOT applying (keeping tab\'s current %d tasks)', tab.id, tab.tasks.length);
   }
   syncState.set(tab.id, state);
   state.pollTimer = setInterval(() => pollTab(tab.id), 2000);
@@ -842,9 +854,11 @@ async function startSync(tab, handle) {
 function scheduleSyncWrite(tab) {
   const state = syncState.get(tab.id);
   if (!state) return;
+  console.log('[sync] scheduleSyncWrite(%s): debouncing write of %d tasks in 1500ms', tab.id, tab.tasks.length);
   clearTimeout(state.writeTimer);
   state.writeTimer = setTimeout(async () => {
     try {
+      console.log('[sync] scheduleSyncWrite(%s): writing %d tasks now, tab.title=%s', tab.id, tab.tasks.length, tab.title);
       await writeTabToHandle(state.handle, tab);
       const file = await state.handle.getFile();
       state.lastKnownMtime = file.lastModified;
@@ -1710,6 +1724,7 @@ function switchToOrCreateDefault() {
 async function autoSaveMdData(tabId, taskList, titleStr, sectionsList) {
   const title = (titleStr || 'tasks').replace(/\.md$/, '');
   const handle = await getStoredHandle(tabId);
+  console.log('[sync] autoSaveMdData(%s): writing %d tasks, via handle=%s', tabId, taskList.length, !!handle);
   if (handle) {
     try {
       const writable = await handle.createWritable();
@@ -1717,7 +1732,7 @@ async function autoSaveMdData(tabId, taskList, titleStr, sectionsList) {
       await writable.close();
       return;
     } catch (e) {
-      console.error(e);
+      console.error('[sync] autoSaveMdData(%s) handle write failed, falling back:', tabId, e);
     }
   }
   const blob = new Blob([generateMd(taskList, title, sectionsList)], { type: 'text/markdown' });
