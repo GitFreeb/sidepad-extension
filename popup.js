@@ -529,6 +529,26 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
       console.log('[sync] connected to existing file via showOpenFilePicker:', handle.name);
       await setStoredHandle(tab.id, handle);
     }
+    // Вкладка default, подключённая к чужому файлу (сейчас или раньше — до
+    // этого фикса), переименовывается под имя файла (как уже делает импорт
+    // для новой вкладки). Иначе title остаётся 'default' навсегда: для неё
+    // продолжают действовать все специальные правила default-вкладки
+    // (например, более мягкое подтверждение при «✕ очистить»), хотя в ней
+    // реальный синхронизируемый список — а generateMd() при каждой записи
+    // пишет # default в заголовок файла вместо его настоящего имени.
+    // Проверяется в обеих ветках (и при свежем выборе файла, и при
+    // переподтверждении уже сохранённого handle), чтобы самоисправить
+    // вкладки, застрявшие в этом состоянии ещё до появления этой правки.
+    if (tab.title === 'default') {
+      const newTitle = handle.name.replace(/\.md$/, '');
+      if (newTitle !== 'default') {
+        console.log('[sync] renaming tab from "default" to "%s" to match connected file', newTitle);
+        tab.title = newTitle;
+        applyTitle(newTitle);
+        renderTabs();
+        saveAllTabs();
+      }
+    }
     const ok = await startSync(tab, handle);
     console.log('[sync] startSync returned', ok);
     if (!ok) return;
