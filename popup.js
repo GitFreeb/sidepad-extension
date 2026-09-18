@@ -640,21 +640,27 @@ document.getElementById('exportBtn').addEventListener('click', async () => {
   const filename = document.getElementById('bcFile').textContent || 'tasks.md';
 
   // Brave отключает File System Access API по умолчанию (showSaveFilePicker
-  // отсутствует), поэтому нужен fallback через Blob + <a download>.
+  // отсутствует). <a download> для fallback не годится: браузер всегда
+  // доуникальнивает имя файла ("name (1).md"), перезаписать им нельзя.
+  // saveAs: false тоже не годится — chrome.downloads тогда пишет строго в
+  // папку "Загрузки" по умолчанию, игнорируя последнюю выбранную пользователем
+  // папку. saveAs: true открывает нативный диалог (который сам помнит
+  // последнюю папку), а conflictAction: 'overwrite' убирает доуникальнивание
+  // имени при повторном сохранении в тот же файл.
   if (!window.showSaveFilePicker) {
-    const blob = new Blob([generateMd()], { type: 'text/plain' });
+    const blob = new Blob([generateMd()], { type: 'text/markdown' });
     const url  = URL.createObjectURL(blob);
     const name = filename.replace(/\.md$/, '') + '.md';
-    const a    = Object.assign(document.createElement('a'), { href: url, download: name });
-    a.click();
-    URL.revokeObjectURL(url);
+    chrome.downloads.download({ url, filename: name, saveAs: true, conflictAction: 'overwrite' }, () => {
+      URL.revokeObjectURL(url);
+    });
     return;
   }
 
   try {
     const opts = {
       suggestedName: filename,
-      types: [{ description: 'Markdown', accept: { 'text/plain': ['.md'] } }],
+      types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
     };
     if (lastFileHandle) opts.startIn = lastFileHandle;
     const handle = await window.showSaveFilePicker(opts);
@@ -1477,7 +1483,7 @@ function autoSaveMdData(taskList, titleStr) {
     + '-' + String(now.getDate()).padStart(2, '0')
     + '_' + String(now.getHours()).padStart(2, '0')
     + '-' + String(now.getMinutes()).padStart(2, '0');
-  const blob = new Blob([generateMd(taskList, title)], { type: 'text/plain' });
+  const blob = new Blob([generateMd(taskList, title)], { type: 'text/markdown' });
   const url  = URL.createObjectURL(blob);
   const a    = Object.assign(document.createElement('a'), { href: url, download: `${title}_${stamp}.md` });
   a.click();
