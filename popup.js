@@ -714,7 +714,6 @@ document.getElementById('importBtn').addEventListener('click', async () => {
 function generateMd(taskList, titleStr) {
   const tl = taskList || tasks;
   const title = titleStr || document.getElementById('bcFile').textContent || 'tasks';
-  let md = `# ${title}\n\n`;
   const map = new Map();
   tl.forEach(item => {
     const key = item.section;
@@ -722,6 +721,8 @@ function generateMd(taskList, titleStr) {
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(item);
   });
+  if (map.size === 0) return '';
+  let md = `# ${title}\n\n`;
   map.forEach((items, section) => {
     md += `## ${section}\n\n`;
     items.forEach(item => {
