@@ -160,7 +160,7 @@ function applyLang(l, save = true) {
   document.getElementById('clearDoneBtn').textContent    = tr('clearBtn');
   document.getElementById('collapseAllBtn').textContent  = allCollapsed ? tr('expandBtn') : tr('collapseBtn');
   document.getElementById('themeBtn').title              = tr('themeTitle');
-  applyAutoSave(autoSave, false);
+  applyAutoSaveButton(getActiveTab());
   const lb = document.getElementById('langBtn');
   lb.textContent = tr('langLabel');
   lb.title       = tr('langTitle');
@@ -185,19 +185,17 @@ let renamingTabId       = null;
 let renamingSection     = null;
 let moveMenuTaskId      = null;
 let justExpandedSection = null;
-let autoSave          = true;
 let selectedSection = null;
 let allCollapsed = false;
 
-function applyAutoSave(on, save = true) {
-  autoSave = on;
+function applyAutoSaveButton(tab) {
+  const on  = !!tab?.autoSave;
   const btn = document.getElementById('autoSaveBtn');
   if (btn) {
     btn.textContent = tr('autoSaveLabel');
     btn.title       = on ? tr('autoSaveOnTitle') : tr('autoSaveOffTitle');
     btn.classList.toggle('off', !on);
   }
-  if (save) chrome.storage.local.set({ autoSave: on });
 }
 
 function updateCollapseBtn() {
@@ -282,6 +280,7 @@ function switchTab(id) {
   tasks    = next.tasks;
   sections = next.sections || deriveSections(next.tasks);
   applyTitle(next.title);
+  applyAutoSaveButton(next);
   resetCollapsedState();
   editingId = null;
   renamingSection = null;
@@ -299,7 +298,7 @@ function closeTab(id) {
   if (tabIdx === -1) return;
   const tab = tabs[tabIdx];
   if (id === activeTabId) { tab.tasks = tasks; tab.sections = sections; }
-  if (autoSave) {
+  if (tab.autoSave) {
     if (tab.tasks.length > 0 && tab.title !== 'example') autoSaveMdData(tab.tasks, tab.title);
   } else if (tab.tasks.length > 0 && tab.title !== 'default' && tab.title !== 'example') {
     if (!confirm(tr('closeNoSaveConfirm'))) return;
@@ -311,9 +310,11 @@ function closeTab(id) {
     tab.title    = 'default';
     tab.tasks    = dt;
     tab.sections = deriveSections(dt);
+    tab.autoSave = false;
     tasks        = dt;
     sections     = tab.sections;
     applyTitle('default');
+    applyAutoSaveButton(tab);
     resetCollapsedState();
     editingId = null;
     renamingSection = null;
@@ -335,6 +336,7 @@ function closeTab(id) {
     tasks        = tabs[newIdx].tasks;
     sections     = tabs[newIdx].sections || deriveSections(tabs[newIdx].tasks);
     applyTitle(tabs[newIdx].title);
+    applyAutoSaveButton(tabs[newIdx]);
     resetCollapsedState();
     editingId = null;
     renamingSection = null;
@@ -410,10 +412,9 @@ function migrateDefaultSection(tab) {
 }
 
 function loadAll() {
-  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang', 'autoSave'], (data) => {
+  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang'], (data) => {
     applyTheme(!!data.lightMode);
     applyLang(data.lang || 'en', false);
-    applyAutoSave(data.autoSave !== false, false);
 
     if (data.tabs && data.tabs.length > 0) {
       tabs = data.tabs.map(migrateDefaultSection);
@@ -429,11 +430,14 @@ function loadAll() {
       activeTabId = 'tab_default';
     }
 
+    tabs.forEach(t => { t.autoSave = false; });
+
     const active = getActiveTab() || tabs[0];
     activeTabId = active.id;
     tasks    = active.tasks;
     sections = active.sections || deriveSections(active.tasks);
     applyTitle(active.title);
+    applyAutoSaveButton(active);
     resetCollapsedState();
     renderTabs();
     render();
@@ -467,7 +471,10 @@ document.getElementById('langBtn').addEventListener('click', () => {
 });
 
 document.getElementById('autoSaveBtn').addEventListener('click', () => {
-  applyAutoSave(!autoSave);
+  const tab = getActiveTab();
+  if (!tab) return;
+  tab.autoSave = !tab.autoSave;
+  applyAutoSaveButton(tab);
 });
 
 /* ── Markdown parser ── */
@@ -610,7 +617,7 @@ function applyImportedFile(text, fileName) {
 
   const title = fileName.replace(/\.[^.]+$/, '');
   const newSections = deriveSections(imported);
-  const newTab = { id: 'tab_' + Date.now(), title, tasks: imported, sections: newSections };
+  const newTab = { id: 'tab_' + Date.now(), title, tasks: imported, sections: newSections, autoSave: false };
   tabs.push(newTab);
   activeTabId = newTab.id;
   tasks    = imported;
@@ -621,6 +628,7 @@ function applyImportedFile(text, fileName) {
   if (defaultIdx !== -1) tabs.splice(defaultIdx, 1);
 
   applyTitle(title);
+  applyAutoSaveButton(newTab);
   resetCollapsedState();
   editingId = null;
   saveAllTabs();
@@ -1505,13 +1513,14 @@ function switchToOrCreateDefault() {
   let defaultTab = tabs.find(t => t.title === 'default');
   if (!defaultTab) {
     const dt = DEFAULT_TASKS.map(t => ({ ...t }));
-    defaultTab = { id: 'tab_' + Date.now(), title: 'default', tasks: dt, sections: deriveSections(dt) };
+    defaultTab = { id: 'tab_' + Date.now(), title: 'default', tasks: dt, sections: deriveSections(dt), autoSave: false };
     tabs.push(defaultTab);
   }
   activeTabId = defaultTab.id;
   tasks    = defaultTab.tasks;
   sections = defaultTab.sections || deriveSections(defaultTab.tasks);
   applyTitle('default');
+  applyAutoSaveButton(defaultTab);
   resetCollapsedState();
   editingId = null; renamingSection = null; moveMenuTaskId = null;
   selectedSection = null; allCollapsed = false; updateCollapseBtn();
@@ -1541,17 +1550,19 @@ function autoSaveMd() {
 }
 
 document.getElementById('clearDoneBtn').addEventListener('click', () => {
-  const activeTitle = getActiveTab()?.title;
+  const activeTab     = getActiveTab();
+  const activeTitle   = activeTab?.title;
+  const tabAutoSave   = !!activeTab?.autoSave;
 
   if (activeTitle === 'default') {
-    if (autoSave && tasks.length > 0) autoSaveMd();
+    if (tabAutoSave && tasks.length > 0) autoSaveMd();
     tasks = []; sections = [];
     saveTasks(); render();
     return;
   }
 
   if (activeTitle !== 'example') {
-    if (autoSave) {
+    if (tabAutoSave) {
       if (tasks.length > 0 && !confirm(tr('clearConfirm'))) return;
       if (tasks.length > 0) autoSaveMd();
     } else {
