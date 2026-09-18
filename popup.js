@@ -15,6 +15,7 @@ const I18N = {
     autoSaveLabel:        '↓auto',
     autoSaveOnTitle:      'Автосохранение включено',
     autoSaveOffTitle:     'Автосохранение выключено',
+    syncFileGoneAlert:    'Файл недоступен, синхронизация остановлена.',
     moveToTitle:          'Переместить в секцию',
     renameSectionTitle:   'Переименовать секцию',
     deleteSectionTitle: 'Удалить секцию',
@@ -47,6 +48,7 @@ const I18N = {
     autoSaveLabel:        '↓auto',
     autoSaveOnTitle:      'Auto-save enabled',
     autoSaveOffTitle:     'Auto-save disabled',
+    syncFileGoneAlert:    'File is unavailable, sync stopped.',
     moveToTitle:          'Move to section',
     renameSectionTitle:   'Rename section',
     deleteSectionTitle: 'Delete section',
@@ -306,6 +308,8 @@ function closeTab(id) {
 
   // Last tab: reset to default instead of removing
   if (tabs.length === 1) {
+    stopSync(tab.id);
+    deleteStoredHandle(tab.id);
     const dt     = DEFAULT_TASKS.map(t => ({ ...t }));
     tab.title    = 'default';
     tab.tasks    = dt;
@@ -328,6 +332,8 @@ function closeTab(id) {
     return;
   }
 
+  stopSync(id);
+  deleteStoredHandle(id);
   tabs.splice(tabIdx, 1);
   if (renamingTabId === id) renamingTabId = null;
   if (activeTabId === id) {
@@ -451,6 +457,7 @@ function saveTasks() {
     tab.tasks    = tasks;
     tab.sections = sections;
     saveAllTabs();
+    scheduleSyncWrite(tab);
   }
 }
 
@@ -476,6 +483,7 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
 
   if (tab.autoSave) {
     tab.autoSave = false;
+    stopSync(tab.id);
     applyAutoSaveButton(tab);
     return;
   }
@@ -501,6 +509,8 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
       });
       await setStoredHandle(tab.id, handle);
     }
+    const ok = await startSync(tab, handle);
+    if (!ok) return;
     tab.autoSave = true;
     applyAutoSaveButton(tab);
   } catch (e) {
@@ -724,6 +734,86 @@ async function writeTabToHandle(handle, tab) {
   const writable = await handle.createWritable();
   await writable.write(generateMd(tab.tasks, tab.title.replace(/\.md$/, '')));
   await writable.close();
+}
+
+/* ── Live sync (poll + debounced write) ── */
+const syncState = new Map(); // tabId -> { handle, pollTimer, writeTimer, lastKnownMtime }
+
+function stopSync(tabId) {
+  const state = syncState.get(tabId);
+  if (!state) return;
+  clearInterval(state.pollTimer);
+  clearTimeout(state.writeTimer);
+  syncState.delete(tabId);
+}
+
+function stopSyncWithAlert(tabId) {
+  stopSync(tabId);
+  const tab = tabs.find(t => t.id === tabId);
+  if (tab) {
+    tab.autoSave = false;
+    if (tabId === activeTabId) applyAutoSaveButton(tab);
+  }
+  alert(tr('syncFileGoneAlert'));
+}
+
+async function pollTab(tabId) {
+  const state = syncState.get(tabId);
+  const tab   = tabs.find(t => t.id === tabId);
+  if (!state || !tab) return;
+  try {
+    const file = await state.handle.getFile();
+    if (file.lastModified === state.lastKnownMtime) return;
+    state.lastKnownMtime = file.lastModified;
+
+    const parsed = parseMd(await file.text(), tab.title);
+    tab.tasks    = parsed;
+    tab.sections = deriveSections(parsed);
+
+    if (tabId === activeTabId) {
+      tasks    = tab.tasks;
+      sections = tab.sections;
+      resetCollapsedState();
+      // Не рвём активный inline-редактор задачи/секции ре-рендером —
+      // данные уже обновлены, DOM подтянет их на следующем render().
+      if (editingId === null && renamingSection === null && moveMenuTaskId === null) render();
+    }
+    saveAllTabs(); // не saveTasks() — иначе применение чужого изменения тут же спровоцирует запись обратно в файл
+  } catch (e) {
+    console.error(e);
+    if (e.name === 'NotFoundError') stopSyncWithAlert(tabId);
+  }
+}
+
+async function startSync(tab, handle) {
+  stopSync(tab.id);
+  const state = { handle, pollTimer: null, writeTimer: null, lastKnownMtime: null };
+  try {
+    const file = await handle.getFile();
+    state.lastKnownMtime = file.lastModified;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+  syncState.set(tab.id, state);
+  state.pollTimer = setInterval(() => pollTab(tab.id), 2000);
+  return true;
+}
+
+function scheduleSyncWrite(tab) {
+  const state = syncState.get(tab.id);
+  if (!state) return;
+  clearTimeout(state.writeTimer);
+  state.writeTimer = setTimeout(async () => {
+    try {
+      await writeTabToHandle(state.handle, tab);
+      const file = await state.handle.getFile();
+      state.lastKnownMtime = file.lastModified;
+    } catch (e) {
+      console.error(e);
+      if (e.name === 'NotFoundError') stopSyncWithAlert(tab.id);
+    }
+  }, 1500);
 }
 
 document.getElementById('exportBtn').addEventListener('click', async () => {
@@ -1613,6 +1703,8 @@ document.getElementById('clearDoneBtn').addEventListener('click', () => {
     }
   }
 
+  stopSync(activeTabId);
+  deleteStoredHandle(activeTabId);
   tabs = tabs.filter(t => t.id !== activeTabId);
   switchToOrCreateDefault();
 });
