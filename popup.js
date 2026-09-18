@@ -299,7 +299,7 @@ function closeTab(id) {
   const tab = tabs[tabIdx];
   if (id === activeTabId) { tab.tasks = tasks; tab.sections = sections; }
   if (tab.autoSave) {
-    if (tab.tasks.length > 0 && tab.title !== 'example') autoSaveMdData(tab.tasks, tab.title);
+    if (tab.tasks.length > 0 && tab.title !== 'example') autoSaveMdData(tab.id, tab.tasks, tab.title);
   } else if (tab.tasks.length > 0 && tab.title !== 'default' && tab.title !== 'example') {
     if (!confirm(tr('closeNoSaveConfirm'))) return;
   }
@@ -689,6 +689,12 @@ function generateMd(taskList, titleStr) {
   return md.trim();
 }
 
+async function writeTabToHandle(handle, tab) {
+  const writable = await handle.createWritable();
+  await writable.write(generateMd(tab.tasks, tab.title.replace(/\.md$/, '')));
+  await writable.close();
+}
+
 document.getElementById('exportBtn').addEventListener('click', async () => {
   const filename = document.getElementById('bcFile').textContent || 'tasks.md';
 
@@ -717,6 +723,8 @@ document.getElementById('exportBtn').addEventListener('click', async () => {
     };
     if (lastFileHandle) opts.startIn = lastFileHandle;
     const handle = await window.showSaveFilePicker(opts);
+    lastFileHandle = handle;
+    await setStoredHandle(activeTabId, handle);
     const writable = await handle.createWritable();
     await writable.write(generateMd());
     await writable.close();
@@ -1527,26 +1535,30 @@ function switchToOrCreateDefault() {
   saveAllTabs(); renderTabs(); render();
 }
 
-function autoSaveMdData(taskList, titleStr) {
-  const title = (titleStr || 'tasks')
-    .replace(/\.md$/, '')
-    .replace(/_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}$/, '');
-  const now   = new Date();
-  const stamp = now.getFullYear()
-    + '-' + String(now.getMonth() + 1).padStart(2, '0')
-    + '-' + String(now.getDate()).padStart(2, '0')
-    + '_' + String(now.getHours()).padStart(2, '0')
-    + '-' + String(now.getMinutes()).padStart(2, '0');
+async function autoSaveMdData(tabId, taskList, titleStr) {
+  const title = (titleStr || 'tasks').replace(/\.md$/, '');
+  const handle = await getStoredHandle(tabId);
+  if (handle) {
+    try {
+      const writable = await handle.createWritable();
+      await writable.write(generateMd(taskList, title));
+      await writable.close();
+      return;
+    } catch (e) {
+      console.error(e);
+    }
+  }
   const blob = new Blob([generateMd(taskList, title)], { type: 'text/markdown' });
   const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement('a'), { href: url, download: `${title}_${stamp}.md` });
-  a.click();
-  URL.revokeObjectURL(url);
+  chrome.downloads.download({ url, filename: title + '.md', saveAs: false, conflictAction: 'overwrite' }, () => {
+    URL.revokeObjectURL(url);
+  });
 }
 
 function autoSaveMd() {
+  const tab   = getActiveTab();
   const title = document.getElementById('bcFile').textContent || 'tasks';
-  autoSaveMdData(tasks, title);
+  if (tab) autoSaveMdData(tab.id, tasks, title);
 }
 
 document.getElementById('clearDoneBtn').addEventListener('click', () => {
