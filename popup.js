@@ -666,7 +666,11 @@ function applyImportedFile(text, fileName) {
 
   // Close the empty default tab if other tabs now exist
   const defaultIdx = tabs.findIndex(t => t.title === 'default' && t.id !== newTab.id);
-  if (defaultIdx !== -1) tabs.splice(defaultIdx, 1);
+  if (defaultIdx !== -1) {
+    stopSync(tabs[defaultIdx].id);
+    deleteStoredHandle(tabs[defaultIdx].id);
+    tabs.splice(defaultIdx, 1);
+  }
 
   applyTitle(title);
   applyAutoSaveButton(newTab);
@@ -785,7 +789,7 @@ async function pollTab(tabId) {
     saveAllTabs(); // не saveTasks() — иначе применение чужого изменения тут же спровоцирует запись обратно в файл
   } catch (e) {
     console.error(e);
-    if (e.name === 'NotFoundError') stopSyncWithAlert(tabId);
+    if (e.name === 'NotFoundError' || e.name === 'NotAllowedError' || e.name === 'SecurityError') stopSyncWithAlert(tabId);
   }
 }
 
@@ -815,7 +819,7 @@ function scheduleSyncWrite(tab) {
       state.lastKnownMtime = file.lastModified;
     } catch (e) {
       console.error(e);
-      if (e.name === 'NotFoundError') stopSyncWithAlert(tab.id);
+      if (e.name === 'NotFoundError' || e.name === 'NotAllowedError' || e.name === 'SecurityError') stopSyncWithAlert(tab.id);
     }
   }, 1500);
 }
@@ -990,7 +994,11 @@ async function loadExample() {
     sections = newTab.sections;
 
     const defaultIdx = tabs.findIndex(t => t.title === 'default' && t.id !== newTab.id);
-    if (defaultIdx !== -1) tabs.splice(defaultIdx, 1);
+    if (defaultIdx !== -1) {
+      stopSync(tabs[defaultIdx].id);
+      deleteStoredHandle(tabs[defaultIdx].id);
+      tabs.splice(defaultIdx, 1);
+    }
 
     applyTitle('example');
     resetCollapsedState();
