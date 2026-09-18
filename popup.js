@@ -301,7 +301,7 @@ function closeTab(id) {
   const tab = tabs[tabIdx];
   if (id === activeTabId) { tab.tasks = tasks; tab.sections = sections; }
   if (tab.autoSave) {
-    if (tab.tasks.length > 0 && tab.title !== 'example') autoSaveMdData(tab.id, tab.tasks, tab.title);
+    if (tab.tasks.length > 0 && tab.title !== 'example') autoSaveMdData(tab.id, tab.tasks, tab.title, tab.sections);
   } else if (tab.tasks.length > 0 && tab.title !== 'default' && tab.title !== 'example') {
     if (!confirm(tr('closeNoSaveConfirm'))) return;
   }
@@ -711,7 +711,7 @@ document.getElementById('importBtn').addEventListener('click', async () => {
 });
 
 /* ── File export ── */
-function generateMd(taskList, titleStr) {
+function generateMd(taskList, titleStr, sectionsList) {
   const tl = taskList || tasks;
   const title = titleStr || document.getElementById('bcFile').textContent || 'tasks';
   const map = new Map();
@@ -722,8 +722,18 @@ function generateMd(taskList, titleStr) {
     map.get(key).push(item);
   });
   if (map.size === 0) return '';
+  // Порядок секций в файле берём из sections (авторитетный порядок,
+  // тот же, что использует render()), а не из первого появления в tl —
+  // иначе задача в новой секции (sections.unshift, но tasks.push) писалась
+  // бы последней секцией в файле, и после разбора на другой стороне
+  // (parseMd → deriveSections, оба сохраняют порядок по массиву) секция
+  // оказывалась бы внизу списка вместо верха.
+  const orderedSections = [...(sectionsList || sections)];
+  map.forEach((_, key) => { if (!orderedSections.includes(key)) orderedSections.push(key); });
   let md = `# ${title}\n\n`;
-  map.forEach((items, section) => {
+  orderedSections.forEach(section => {
+    const items = map.get(section);
+    if (!items) return;
     md += `## ${section}\n\n`;
     items.forEach(item => {
       md += `- [${item.done ? 'x' : ' '}] ${item.text}`;
@@ -736,7 +746,7 @@ function generateMd(taskList, titleStr) {
 }
 
 async function writeTabToHandle(handle, tab) {
-  const content  = generateMd(tab.tasks, tab.title.replace(/\.md$/, ''));
+  const content  = generateMd(tab.tasks, tab.title.replace(/\.md$/, ''), tab.sections);
   const writable = await handle.createWritable();
   await writable.write(content);
   await writable.close();
@@ -1697,20 +1707,20 @@ function switchToOrCreateDefault() {
   saveAllTabs(); renderTabs(); render();
 }
 
-async function autoSaveMdData(tabId, taskList, titleStr) {
+async function autoSaveMdData(tabId, taskList, titleStr, sectionsList) {
   const title = (titleStr || 'tasks').replace(/\.md$/, '');
   const handle = await getStoredHandle(tabId);
   if (handle) {
     try {
       const writable = await handle.createWritable();
-      await writable.write(generateMd(taskList, title));
+      await writable.write(generateMd(taskList, title, sectionsList));
       await writable.close();
       return;
     } catch (e) {
       console.error(e);
     }
   }
-  const blob = new Blob([generateMd(taskList, title)], { type: 'text/markdown' });
+  const blob = new Blob([generateMd(taskList, title, sectionsList)], { type: 'text/markdown' });
   const url  = URL.createObjectURL(blob);
   chrome.downloads.download({ url, filename: title + '.md', saveAs: false, conflictAction: 'overwrite' }, () => {
     URL.revokeObjectURL(url);
@@ -1720,7 +1730,7 @@ async function autoSaveMdData(tabId, taskList, titleStr) {
 function autoSaveMd() {
   const tab   = getActiveTab();
   const title = document.getElementById('bcFile').textContent || 'tasks';
-  if (tab) autoSaveMdData(tab.id, tasks, title);
+  if (tab) autoSaveMdData(tab.id, tasks, title, sections);
 }
 
 document.getElementById('clearDoneBtn').addEventListener('click', () => {
