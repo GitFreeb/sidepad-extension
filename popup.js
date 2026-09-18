@@ -16,6 +16,7 @@ const I18N = {
     autoSaveOnTitle:      'Автосохранение включено',
     autoSaveOffTitle:     'Автосохранение выключено',
     syncFileGoneAlert:    'Файл недоступен, синхронизация остановлена.',
+    syncMismatchConfirm:  'Выбранный файл содержит другой список ({fileCount} задач) — на экране сейчас {localCount}. Заменить текущий список содержимым файла?',
     moveToTitle:          'Переместить в секцию',
     renameSectionTitle:   'Переименовать секцию',
     deleteSectionTitle: 'Удалить секцию',
@@ -49,6 +50,7 @@ const I18N = {
     autoSaveOnTitle:      'Auto-save enabled',
     autoSaveOffTitle:     'Auto-save disabled',
     syncFileGoneAlert:    'File is unavailable, sync stopped.',
+    syncMismatchConfirm:  'The selected file has a different list ({fileCount} tasks) — the screen currently shows {localCount}. Replace the current list with the file\'s content?',
     moveToTitle:          'Move to section',
     renameSectionTitle:   'Rename section',
     deleteSectionTitle: 'Delete section',
@@ -488,7 +490,7 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
     return;
   }
 
-  if (!window.showSaveFilePicker) {
+  if (!window.showOpenFilePicker) {
     tab.autoSave = true;
     applyAutoSaveButton(tab);
     return;
@@ -505,12 +507,26 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
         return;
       }
     } else {
-      handle = await window.showSaveFilePicker({
-        suggestedName: tab.title.replace(/\.md$/, '') + '.md',
+      // Подключение к УЖЕ СУЩЕСТВУЮЩЕМУ файлу — сознательно showOpenFilePicker
+      // ("Открыть"), а не showSaveFilePicker ("Сохранить как"). У диалога
+      // сохранения нативное окно ОС при выборе существующего файла спрашивает
+      // "Заменить файл?" — хотя на этом шаге мы только читаем, ничего ещё не
+      // пишем. Формулировка "заменить" провоцирует случайную перезапись
+      // чужого списка пустым. Создание НОВОГО файла для вкладки — через
+      // кнопку «Экспорт» (использует showSaveFilePicker и сама сохраняет
+      // handle), ↓auto дальше просто его переиспользует без повторного выбора.
+      const [openedHandle] = await window.showOpenFilePicker({
         types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
+        multiple: false,
         startIn: 'documents',
       });
-      console.log('[sync] picked new file via showSaveFilePicker:', handle.name);
+      const perm = await openedHandle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted' && await openedHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
+        console.log('[sync] readwrite permission denied for opened file, aborting activation');
+        return;
+      }
+      handle = openedHandle;
+      console.log('[sync] connected to existing file via showOpenFilePicker:', handle.name);
       await setStoredHandle(tab.id, handle);
     }
     const ok = await startSync(tab, handle);
@@ -833,6 +849,25 @@ async function startSync(tab, handle) {
     return false;
   }
   if (parsed.length > 0) {
+    // Защита от дурака: если на экране уже есть реальные задачи и выбранный
+    // файл содержит ДРУГОЙ список — не подменяем его молча. Сравниваем через
+    // тот же generateMd(), которым и так пишем на диск, вместо отдельной
+    // логики сравнения. Пустая вкладка или совпадающее содержимое —
+    // подключаем без вопросов, как раньше.
+    if (tab.tasks.length > 0) {
+      const parsedSections = deriveSections(parsed);
+      const currentMd = generateMd(tab.tasks, tab.title, tab.sections);
+      const fileMd    = generateMd(parsed, tab.title, parsedSections);
+      if (currentMd !== fileMd) {
+        const msg = tr('syncMismatchConfirm')
+          .replace('{fileCount}', parsed.length)
+          .replace('{localCount}', tab.tasks.length);
+        if (!confirm(msg)) {
+          console.log('[sync] startSync(%s): user declined content mismatch, aborting activation', tab.id);
+          return false;
+        }
+      }
+    }
     console.log('[sync] startSync(%s): applying %d parsed tasks to tab (was %d)', tab.id, parsed.length, tab.tasks.length);
     tab.tasks    = parsed;
     tab.sections = deriveSections(parsed);
