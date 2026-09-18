@@ -19,6 +19,7 @@ A Chrome side panel for managing task lists in Markdown format. Works as a nativ
 - [Working with Sections](#working-with-sections)
 - [Tabs](#tabs)
 - [Import and Export](#import-and-export)
+- [Cross-Browser Sync](#cross-browser-sync)
 - [Drag and Drop](#drag-and-drop)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Data Storage](#data-storage)
@@ -60,15 +61,20 @@ The extension requires no registration, sends no data over the network, has no d
 - Each imported file opens in a separate tab
 - Rename a tab by double-clicking its name
 - Hidden-tab indicator (`+N`) when the tab bar overflows horizontally
-- Closing a tab automatically saves the list to Downloads
+- Closing a tab saves the list if that tab's `↓auto` is on (off by default each session)
 - Closing the last tab resets the content to an empty default state
 
 ### Import and Export
 - Load `.md` and `.txt` files via the system file dialog
 - Save the current list to `.md` via a Save As dialog
-- `↓auto` button to toggle auto-save to Downloads on/off
+- `↓auto` button connects a tab to a file on disk and keeps it saved automatically (per tab, off by default each session)
 - Support for `[x]` and `[ ]` checkboxes in Markdown
 - URLs in tasks are extracted and become clickable links
+
+### Cross-Browser Sync
+- Connect the same tab to the same file from two different browsers (e.g. Chrome and Brave) — edits made in one appear in the other within a couple of seconds
+- Works entirely through the shared file on disk, no network or account involved
+- Requires the File System Access API (built into Chrome; in Brave, enable it via `brave://flags`)
 
 ### Appearance
 - Dark and light theme (toggle in the header)
@@ -130,14 +136,14 @@ After loading, `default.md` closes automatically.
 
 | Element | Description |
 |---|---|
-| `✳ name.md ×` | Tab. `×` — close with auto-save to Downloads |
+| `✳ name.md ×` | Tab. `×` — close (saves first if `↓auto` is on) |
 | `RU` / `EN` | Language toggle button |
 | `◐` / `●` | Dark/light theme toggle |
 | `~/tasks/ name.md` | Breadcrumb — current tab name |
 | `N / M` | Counter: done / total tasks |
 | `↑ import` | Open a `.md` file in a new tab |
 | `↓ export` | Save the current list to a file |
-| `✕ clear` | Clear the list (auto-saves to Downloads) |
+| `✕ clear` | Clear the list (saves first if `↓auto` is on; asks for confirmation) |
 | `⠿` | Drag handle for a task |
 | `⧉` | Copy task text to clipboard |
 | `×` on a task | Delete the task |
@@ -145,7 +151,7 @@ After loading, `default.md` closes automatically.
 | `✎` on a section | Rename the section (appears on hover) |
 | `→` on a task | Move the task to another section (appears on hover) |
 | `N/M` in section header | Done / total in this section |
-| `↓auto` | Toggle auto-save to Downloads on/off |
+| `↓auto` | Connect this tab to a file and keep it synced automatically |
 | `▸ collapse` / `▾ expand` | Collapse or expand all sections at once |
 
 ---
@@ -230,7 +236,7 @@ Click the desired tab in the top bar. Each tab's state is saved when switching.
 
 ### Close a Tab
 
-Click **`×`** on a tab. The current list version is automatically saved to the Downloads folder as `name_YYYY-MM-DD_HH-MM.md`.
+Click **`×`** on a tab. If `↓auto` is on for that tab, the list is saved first — to the file it's connected to, or to Downloads as a plain `name.md` if it isn't connected to one. `↓auto` is off by default and resets every time the panel reopens, so this only applies to tabs you've turned it on for during the current session.
 
 Closing the last tab does not clear the list — the content resets to the empty `default.md` state.
 
@@ -292,19 +298,48 @@ Another section:
 
 ### Export to `.md` File
 
-Click **↓ export**. A Save As dialog opens with the current filename. The exported file contains all sections and tasks with `[x]` / `[ ]` marks.
+Click **↓ export**. A Save As dialog opens with the current filename. The exported file contains all sections and tasks with `[x]` / `[ ]` marks. The chosen file is remembered — later exports or `↓auto` (see below) reuse it directly, without asking again.
+
+If the File System Access API isn't available (Brave with the flag off — see [Cross-Browser Sync](#cross-browser-sync)), export falls back to a native download dialog, which still avoids creating duplicate files like `name (1).md`.
 
 ### Auto-save
 
-Controlled by the **`↓auto`** button in the tab bar. Enabled by default. When turned off, the button dims and auto-save is disabled.
+Controlled by the **`↓auto`** button in the tab bar — per tab, not global. Every tab starts with `↓auto` off each time the panel opens, regardless of what it was set to before.
 
-When auto-save is enabled, the file is saved:
-- When closing a tab with `×`
-- When pressing **✕ clear** (before deleting the content)
+Clicking `↓auto` on:
+- A tab that already has a connected file — silently reconfirms access to it (may show a brief in-page permission prompt)
+- A tab with no connected file yet — opens a file picker to choose an existing file to connect to
 
-The `example` tab is never auto-saved. The `default` tab saves without a confirmation dialog.
+If the tab already has real tasks and the chosen file holds a *different* list, you'll be asked to confirm before it's replaced — nothing is overwritten silently. Once connected, edits write to that file automatically (about 1.5 seconds after you stop typing), and changes made to the file from elsewhere — including another browser, see [Cross-Browser Sync](#cross-browser-sync) — are picked up automatically too.
 
-The file is saved to Downloads as `name_YYYY-MM-DD_HH-MM.md`. If the filename already contains a timestamp, it is replaced rather than appended again.
+Without a connected file, `↓auto` still saves on close/clear as a plain, non-timestamped `name.md` in Downloads.
+
+The `example` tab can never have `↓auto` turned on. The `default` tab still asks for confirmation before saving over an existing list.
+
+---
+
+## Cross-Browser Sync
+
+Two browsers (e.g. Chrome and Brave) can keep the same tab's list in sync live, through a shared file on disk — no server, no account, no network traffic beyond your own filesystem.
+
+### How it Works
+
+1. In the first browser, click **↓auto** on the tab you want to sync and pick the file to use (or connect to one you already export to).
+2. In the second browser, open the same tab (or the empty `default` tab) and click **↓auto**, choosing the *same file*.
+3. From then on, edits in either browser reach the other within a couple of seconds, as long as both side panels are open and both have `↓auto` on for that tab.
+
+Connecting the empty `default` tab to an existing file automatically renames it to match the file, so it stops behaving like a disposable default tab.
+
+### Requirements
+
+- **Chrome** supports this out of the box.
+- **Brave** disables the underlying File System Access API by default. Enable it at `brave://flags/#file-system-access-api`, set it to **Enabled**, and relaunch Brave. Without this flag, `↓auto` still works for local auto-save, just not live sync.
+
+### Safety
+
+- Connecting a tab that already has tasks to a file with *different* content asks for confirmation first — it never silently replaces your list.
+- `↓auto` resets to off every time you reopen the panel, in both browsers — sync only runs while you've explicitly turned it on for the current session.
+- Sync is one file per tab and doesn't merge simultaneous edits from both sides — whichever write reaches the file last wins. It's meant for one person switching between two browsers, not concurrent editing by multiple people.
 
 ---
 
@@ -358,17 +393,21 @@ All data is stored in `chrome.storage.local` — locally in the browser, with no
       "id": "tab_1234567890",
       "title": "work",
       "tasks": [ ... ],
-      "sections": ["Priority", "Backlog"]
+      "sections": ["Priority", "Backlog"],
+      "autoSave": false
     }
   ],
   "activeTabId": "tab_1234567890",
   "lightMode": false,
-  "lang": "en",
-  "autoSave": true
+  "lang": "en"
 }
 ```
 
+`autoSave` is per tab and is always reset to `false` when the panel loads — it doesn't persist across sessions.
+
 Data is saved on every change and restored on the next panel open. Legacy data format (before tabs were introduced) automatically migrates on first open.
+
+Files connected via `↓auto` or `↓ export` are referenced through [`FileSystemFileHandle`](https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle) objects, which can't be stored as JSON — they're kept in a separate IndexedDB database (`sidepad-handles`), one entry per tab.
 
 ---
 
@@ -377,7 +416,7 @@ Data is saved on every change and restored on the next panel open. Legacy data f
 | Parameter | Value |
 |---|---|
 | Manifest version | V3 |
-| Permissions | `storage`, `sidePanel` |
+| Permissions | `storage`, `sidePanel`, `downloads` |
 | Dependencies | none |
 | Build | not required |
 | Stack | Vanilla JS, HTML, CSS |
@@ -395,8 +434,8 @@ Sidepad/
 ├── popup.js            — all logic
 ├── default.md          — empty default list
 ├── example.md          — usage example for new users
-├── README.md           — documentation (Russian)
-├── README.en.md        — documentation (English)
+├── README.md           — documentation (English)
+├── README.ru.md        — documentation (Russian)
 ├── INFO.ru.txt         — plain text documentation (Russian)
 ├── INFO.en.txt         — plain text documentation (English)
 └── icons/

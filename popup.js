@@ -15,6 +15,8 @@ const I18N = {
     autoSaveLabel:        '↓auto',
     autoSaveOnTitle:      'Автосохранение включено',
     autoSaveOffTitle:     'Автосохранение выключено',
+    syncFileGoneAlert:    'Файл недоступен, синхронизация остановлена.',
+    syncMismatchConfirm:  'Выбранный файл содержит другой список ({fileCount} задач) — на экране сейчас {localCount}. Заменить текущий список содержимым файла?',
     moveToTitle:          'Переместить в секцию',
     renameSectionTitle:   'Переименовать секцию',
     deleteSectionTitle: 'Удалить секцию',
@@ -47,6 +49,8 @@ const I18N = {
     autoSaveLabel:        '↓auto',
     autoSaveOnTitle:      'Auto-save enabled',
     autoSaveOffTitle:     'Auto-save disabled',
+    syncFileGoneAlert:    'File is unavailable, sync stopped.',
+    syncMismatchConfirm:  'The selected file has a different list ({fileCount} tasks) — the screen currently shows {localCount}. Replace the current list with the file\'s content?',
     moveToTitle:          'Move to section',
     renameSectionTitle:   'Rename section',
     deleteSectionTitle: 'Delete section',
@@ -160,7 +164,7 @@ function applyLang(l, save = true) {
   document.getElementById('clearDoneBtn').textContent    = tr('clearBtn');
   document.getElementById('collapseAllBtn').textContent  = allCollapsed ? tr('expandBtn') : tr('collapseBtn');
   document.getElementById('themeBtn').title              = tr('themeTitle');
-  applyAutoSave(autoSave, false);
+  applyAutoSaveButton(getActiveTab());
   const lb = document.getElementById('langBtn');
   lb.textContent = tr('langLabel');
   lb.title       = tr('langTitle');
@@ -185,19 +189,17 @@ let renamingTabId       = null;
 let renamingSection     = null;
 let moveMenuTaskId      = null;
 let justExpandedSection = null;
-let autoSave          = true;
 let selectedSection = null;
 let allCollapsed = false;
 
-function applyAutoSave(on, save = true) {
-  autoSave = on;
+function applyAutoSaveButton(tab) {
+  const on  = !!tab?.autoSave;
   const btn = document.getElementById('autoSaveBtn');
   if (btn) {
     btn.textContent = tr('autoSaveLabel');
     btn.title       = on ? tr('autoSaveOnTitle') : tr('autoSaveOffTitle');
     btn.classList.toggle('off', !on);
   }
-  if (save) chrome.storage.local.set({ autoSave: on });
 }
 
 function updateCollapseBtn() {
@@ -282,6 +284,7 @@ function switchTab(id) {
   tasks    = next.tasks;
   sections = next.sections || deriveSections(next.tasks);
   applyTitle(next.title);
+  applyAutoSaveButton(next);
   resetCollapsedState();
   editingId = null;
   renamingSection = null;
@@ -299,21 +302,25 @@ function closeTab(id) {
   if (tabIdx === -1) return;
   const tab = tabs[tabIdx];
   if (id === activeTabId) { tab.tasks = tasks; tab.sections = sections; }
-  if (autoSave) {
-    if (tab.tasks.length > 0 && tab.title !== 'example') autoSaveMdData(tab.tasks, tab.title);
+  if (tab.autoSave) {
+    if (tab.tasks.length > 0 && tab.title !== 'example') autoSaveMdData(tab.id, tab.tasks, tab.title, tab.sections);
   } else if (tab.tasks.length > 0 && tab.title !== 'default' && tab.title !== 'example') {
     if (!confirm(tr('closeNoSaveConfirm'))) return;
   }
 
   // Last tab: reset to default instead of removing
   if (tabs.length === 1) {
+    stopSync(tab.id);
+    deleteStoredHandle(tab.id);
     const dt     = DEFAULT_TASKS.map(t => ({ ...t }));
     tab.title    = 'default';
     tab.tasks    = dt;
     tab.sections = deriveSections(dt);
+    tab.autoSave = false;
     tasks        = dt;
     sections     = tab.sections;
     applyTitle('default');
+    applyAutoSaveButton(tab);
     resetCollapsedState();
     editingId = null;
     renamingSection = null;
@@ -327,6 +334,8 @@ function closeTab(id) {
     return;
   }
 
+  stopSync(id);
+  deleteStoredHandle(id);
   tabs.splice(tabIdx, 1);
   if (renamingTabId === id) renamingTabId = null;
   if (activeTabId === id) {
@@ -335,6 +344,7 @@ function closeTab(id) {
     tasks        = tabs[newIdx].tasks;
     sections     = tabs[newIdx].sections || deriveSections(tabs[newIdx].tasks);
     applyTitle(tabs[newIdx].title);
+    applyAutoSaveButton(tabs[newIdx]);
     resetCollapsedState();
     editingId = null;
     renamingSection = null;
@@ -410,10 +420,9 @@ function migrateDefaultSection(tab) {
 }
 
 function loadAll() {
-  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang', 'autoSave'], (data) => {
+  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang'], (data) => {
     applyTheme(!!data.lightMode);
     applyLang(data.lang || 'en', false);
-    applyAutoSave(data.autoSave !== false, false);
 
     if (data.tabs && data.tabs.length > 0) {
       tabs = data.tabs.map(migrateDefaultSection);
@@ -429,11 +438,14 @@ function loadAll() {
       activeTabId = 'tab_default';
     }
 
+    tabs.forEach(t => { t.autoSave = false; });
+
     const active = getActiveTab() || tabs[0];
     activeTabId = active.id;
     tasks    = active.tasks;
     sections = active.sections || deriveSections(active.tasks);
     applyTitle(active.title);
+    applyAutoSaveButton(active);
     resetCollapsedState();
     renderTabs();
     render();
@@ -447,6 +459,7 @@ function saveTasks() {
     tab.tasks    = tasks;
     tab.sections = sections;
     saveAllTabs();
+    scheduleSyncWrite(tab);
   }
 }
 
@@ -466,8 +479,77 @@ document.getElementById('langBtn').addEventListener('click', () => {
   applyLang(lang === 'ru' ? 'en' : 'ru');
 });
 
-document.getElementById('autoSaveBtn').addEventListener('click', () => {
-  applyAutoSave(!autoSave);
+document.getElementById('autoSaveBtn').addEventListener('click', async () => {
+  const tab = getActiveTab();
+  if (!tab || tab.title === 'example') return;
+
+  if (tab.autoSave) {
+    tab.autoSave = false;
+    stopSync(tab.id);
+    applyAutoSaveButton(tab);
+    return;
+  }
+
+  if (!window.showOpenFilePicker) {
+    tab.autoSave = true;
+    applyAutoSaveButton(tab);
+    return;
+  }
+
+  try {
+    let handle = await getStoredHandle(tab.id);
+    if (handle) {
+      const perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted' && await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
+        return;
+      }
+    } else {
+      // Подключение к УЖЕ СУЩЕСТВУЮЩЕМУ файлу — сознательно showOpenFilePicker
+      // ("Открыть"), а не showSaveFilePicker ("Сохранить как"). У диалога
+      // сохранения нативное окно ОС при выборе существующего файла спрашивает
+      // "Заменить файл?" — хотя на этом шаге мы только читаем, ничего ещё не
+      // пишем. Формулировка "заменить" провоцирует случайную перезапись
+      // чужого списка пустым. Создание НОВОГО файла для вкладки — через
+      // кнопку «Экспорт» (использует showSaveFilePicker и сама сохраняет
+      // handle), ↓auto дальше просто его переиспользует без повторного выбора.
+      const [openedHandle] = await window.showOpenFilePicker({
+        types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
+        multiple: false,
+        startIn: 'documents',
+      });
+      const perm = await openedHandle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted' && await openedHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
+        return;
+      }
+      handle = openedHandle;
+      await setStoredHandle(tab.id, handle);
+    }
+    // Вкладка default, подключённая к чужому файлу (сейчас или раньше — до
+    // этого фикса), переименовывается под имя файла (как уже делает импорт
+    // для новой вкладки). Иначе title остаётся 'default' навсегда: для неё
+    // продолжают действовать все специальные правила default-вкладки
+    // (например, более мягкое подтверждение при «✕ очистить»), хотя в ней
+    // реальный синхронизируемый список — а generateMd() при каждой записи
+    // пишет # default в заголовок файла вместо его настоящего имени.
+    // Проверяется в обеих ветках (и при свежем выборе файла, и при
+    // переподтверждении уже сохранённого handle), чтобы самоисправить
+    // вкладки, застрявшие в этом состоянии ещё до появления этой правки.
+    if (tab.title === 'default') {
+      const newTitle = handle.name.replace(/\.md$/, '');
+      if (newTitle !== 'default') {
+        tab.title = newTitle;
+        applyTitle(newTitle);
+        renderTabs();
+        saveAllTabs();
+      }
+    }
+    const ok = await startSync(tab, handle);
+    if (!ok) return;
+    tab.autoSave = true;
+    applyAutoSaveButton(tab);
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+  }
 });
 
 /* ── Markdown parser ── */
@@ -553,6 +635,51 @@ function parseMd(content, fileName) {
   return result;
 }
 
+/* ── File handle persistence (IndexedDB) ── */
+const HANDLE_DB_NAME = 'sidepad-handles';
+const HANDLE_STORE    = 'handles';
+
+function openHandleDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HANDLE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(HANDLE_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function getStoredHandle(tabId) {
+  const db = await openHandleDB();
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(HANDLE_STORE, 'readonly');
+    const req = tx.objectStore(HANDLE_STORE).get(tabId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function setStoredHandle(tabId, handle) {
+  const db = await openHandleDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, 'readwrite');
+    tx.objectStore(HANDLE_STORE).put(handle, tabId);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+async function deleteStoredHandle(tabId) {
+  const db = await openHandleDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, 'readwrite');
+    tx.objectStore(HANDLE_STORE).delete(tabId);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
 /* ── File import ── */
 let lastFileHandle = null;
 
@@ -565,7 +692,7 @@ function applyImportedFile(text, fileName) {
 
   const title = fileName.replace(/\.[^.]+$/, '');
   const newSections = deriveSections(imported);
-  const newTab = { id: 'tab_' + Date.now(), title, tasks: imported, sections: newSections };
+  const newTab = { id: 'tab_' + Date.now(), title, tasks: imported, sections: newSections, autoSave: false };
   tabs.push(newTab);
   activeTabId = newTab.id;
   tasks    = imported;
@@ -573,9 +700,14 @@ function applyImportedFile(text, fileName) {
 
   // Close the empty default tab if other tabs now exist
   const defaultIdx = tabs.findIndex(t => t.title === 'default' && t.id !== newTab.id);
-  if (defaultIdx !== -1) tabs.splice(defaultIdx, 1);
+  if (defaultIdx !== -1) {
+    stopSync(tabs[defaultIdx].id);
+    deleteStoredHandle(tabs[defaultIdx].id);
+    tabs.splice(defaultIdx, 1);
+  }
 
   applyTitle(title);
+  applyAutoSaveButton(newTab);
   resetCollapsedState();
   editingId = null;
   saveAllTabs();
@@ -613,10 +745,9 @@ document.getElementById('importBtn').addEventListener('click', async () => {
 });
 
 /* ── File export ── */
-function generateMd(taskList, titleStr) {
+function generateMd(taskList, titleStr, sectionsList) {
   const tl = taskList || tasks;
   const title = titleStr || document.getElementById('bcFile').textContent || 'tasks';
-  let md = `# ${title}\n\n`;
   const map = new Map();
   tl.forEach(item => {
     const key = item.section;
@@ -624,7 +755,19 @@ function generateMd(taskList, titleStr) {
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(item);
   });
-  map.forEach((items, section) => {
+  if (map.size === 0) return '';
+  // Порядок секций в файле берём из sections (авторитетный порядок,
+  // тот же, что использует render()), а не из первого появления в tl —
+  // иначе задача в новой секции (sections.unshift, но tasks.push) писалась
+  // бы последней секцией в файле, и после разбора на другой стороне
+  // (parseMd → deriveSections, оба сохраняют порядок по массиву) секция
+  // оказывалась бы внизу списка вместо верха.
+  const orderedSections = [...(sectionsList || sections)];
+  map.forEach((_, key) => { if (!orderedSections.includes(key)) orderedSections.push(key); });
+  let md = `# ${title}\n\n`;
+  orderedSections.forEach(section => {
+    const items = map.get(section);
+    if (!items) return;
     md += `## ${section}\n\n`;
     items.forEach(item => {
       md += `- [${item.done ? 'x' : ' '}] ${item.text}`;
@@ -636,31 +779,175 @@ function generateMd(taskList, titleStr) {
   return md.trim();
 }
 
+async function writeTabToHandle(handle, tab) {
+  const content  = generateMd(tab.tasks, tab.title.replace(/\.md$/, ''), tab.sections);
+  const writable = await handle.createWritable();
+  await writable.write(content);
+  await writable.close();
+}
+
+/* ── Live sync (poll + debounced write) ── */
+const syncState = new Map(); // tabId -> { handle, pollTimer, writeTimer, lastKnownMtime }
+
+function stopSync(tabId) {
+  const state = syncState.get(tabId);
+  if (!state) return;
+  clearInterval(state.pollTimer);
+  clearTimeout(state.writeTimer);
+  syncState.delete(tabId);
+}
+
+function stopSyncWithAlert(tabId) {
+  stopSync(tabId);
+  const tab = tabs.find(t => t.id === tabId);
+  if (tab) {
+    tab.autoSave = false;
+    if (tabId === activeTabId) applyAutoSaveButton(tab);
+  }
+  alert(tr('syncFileGoneAlert'));
+}
+
+async function pollTab(tabId) {
+  const state = syncState.get(tabId);
+  const tab   = tabs.find(t => t.id === tabId);
+  if (!state || !tab) return;
+  const busyEditing = () => tabId === activeTabId &&
+    (editingId !== null || renamingSection !== null || moveMenuTaskId !== null || dragType !== null);
+  if (busyEditing()) return;
+  try {
+    const file = await state.handle.getFile();
+    if (file.lastModified === state.lastKnownMtime) return;
+
+    const text = await file.text();
+    // Re-check: the user may have started editing/renaming/dragging during
+    // the I/O above, after the guard at the top of this function already
+    // passed. parseMd() не сохраняет id задач между раундами разбора
+    // markdown — применение чужого изменения во время правки осиротило бы
+    // editingId и saveEdit() молча потерял бы недописанную правку, а во
+    // время drag сломало бы перетаскивание (render() отрывает узел от DOM).
+    if (busyEditing()) return;
+
+    const parsed = parseMd(text, tab.title);
+    tab.tasks    = parsed;
+    tab.sections = deriveSections(parsed);
+    state.lastKnownMtime = file.lastModified; // advance only after a successful apply
+
+    if (tabId === activeTabId) {
+      tasks    = tab.tasks;
+      sections = tab.sections;
+      resetCollapsedState();
+      render();
+    }
+    saveAllTabs(); // не saveTasks() — иначе применение чужого изменения тут же спровоцирует запись обратно в файл
+  } catch (e) {
+    console.error(e);
+    if (e.name === 'NotFoundError' || e.name === 'NotAllowedError' || e.name === 'SecurityError') stopSyncWithAlert(tabId);
+  }
+}
+
+async function startSync(tab, handle) {
+  stopSync(tab.id);
+  const state = { handle, pollTimer: null, writeTimer: null, lastKnownMtime: null };
+  let parsed;
+  try {
+    const file = await handle.getFile();
+    const text = await file.text();
+    parsed = parseMd(text, tab.title);
+    state.lastKnownMtime = file.lastModified;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+  if (parsed.length > 0) {
+    // Защита от дурака: если на экране уже есть реальные задачи и выбранный
+    // файл содержит ДРУГОЙ список — не подменяем его молча. Сравниваем через
+    // тот же generateMd(), которым и так пишем на диск, вместо отдельной
+    // логики сравнения. Пустая вкладка или совпадающее содержимое —
+    // подключаем без вопросов, как раньше.
+    if (tab.tasks.length > 0) {
+      const parsedSections = deriveSections(parsed);
+      const currentMd = generateMd(tab.tasks, tab.title, tab.sections);
+      const fileMd    = generateMd(parsed, tab.title, parsedSections);
+      if (currentMd !== fileMd) {
+        const msg = tr('syncMismatchConfirm')
+          .replace('{fileCount}', parsed.length)
+          .replace('{localCount}', tab.tasks.length);
+        if (!confirm(msg)) {
+          return false;
+        }
+      }
+    }
+    tab.tasks    = parsed;
+    tab.sections = deriveSections(parsed);
+    if (tab.id === activeTabId) {
+      tasks    = tab.tasks;
+      sections = tab.sections;
+      resetCollapsedState();
+      render();
+    }
+    saveAllTabs();
+  }
+  syncState.set(tab.id, state);
+  state.pollTimer = setInterval(() => pollTab(tab.id), 2000);
+  return true;
+}
+
+function scheduleSyncWrite(tab) {
+  const state = syncState.get(tab.id);
+  if (!state) return;
+  clearTimeout(state.writeTimer);
+  state.writeTimer = setTimeout(async () => {
+    try {
+      await writeTabToHandle(state.handle, tab);
+      const file = await state.handle.getFile();
+      state.lastKnownMtime = file.lastModified;
+    } catch (e) {
+      console.error(e);
+      if (e.name === 'NotFoundError' || e.name === 'NotAllowedError' || e.name === 'SecurityError') stopSyncWithAlert(tab.id);
+    }
+  }, 1500);
+}
+
 document.getElementById('exportBtn').addEventListener('click', async () => {
   const filename = document.getElementById('bcFile').textContent || 'tasks.md';
 
   // Brave отключает File System Access API по умолчанию (showSaveFilePicker
-  // отсутствует), поэтому нужен fallback через Blob + <a download>.
+  // отсутствует). <a download> для fallback не годится: браузер всегда
+  // доуникальнивает имя файла ("name (1).md"), перезаписать им нельзя.
+  // saveAs: false тоже не годится — chrome.downloads тогда пишет строго в
+  // папку "Загрузки" по умолчанию, игнорируя последнюю выбранную пользователем
+  // папку. saveAs: true открывает нативный диалог (который сам помнит
+  // последнюю папку), а conflictAction: 'overwrite' убирает доуникальнивание
+  // имени при повторном сохранении в тот же файл.
   if (!window.showSaveFilePicker) {
-    const blob = new Blob([generateMd()], { type: 'text/plain' });
+    const blob = new Blob([generateMd()], { type: 'text/markdown' });
     const url  = URL.createObjectURL(blob);
     const name = filename.replace(/\.md$/, '') + '.md';
-    const a    = Object.assign(document.createElement('a'), { href: url, download: name });
-    a.click();
-    URL.revokeObjectURL(url);
+    chrome.downloads.download({ url, filename: name, saveAs: true, conflictAction: 'overwrite' }, () => {
+      URL.revokeObjectURL(url);
+    });
     return;
   }
 
   try {
     const opts = {
       suggestedName: filename,
-      types: [{ description: 'Markdown', accept: { 'text/plain': ['.md'] } }],
+      types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
     };
     if (lastFileHandle) opts.startIn = lastFileHandle;
     const handle = await window.showSaveFilePicker(opts);
+    lastFileHandle = handle;
+    await setStoredHandle(activeTabId, handle);
     const writable = await handle.createWritable();
     await writable.write(generateMd());
     await writable.close();
+    if (syncState.has(activeTabId)) {
+      const tab = getActiveTab();
+      if (tab && !(await startSync(tab, handle))) {
+        tab.autoSave = false;
+        applyAutoSaveButton(tab);
+      }
+    }
   } catch (e) {
     if (e.name !== 'AbortError') console.error(e);
   }
@@ -791,16 +1078,21 @@ async function loadExample() {
     const current = getActiveTab();
     if (current) { current.tasks = tasks; current.sections = sections; }
 
-    const newTab = { id: 'tab_' + Date.now(), title: 'example', tasks: imported, sections: deriveSections(imported) };
+    const newTab = { id: 'tab_' + Date.now(), title: 'example', tasks: imported, sections: deriveSections(imported), autoSave: false };
     tabs.push(newTab);
     activeTabId = newTab.id;
     tasks    = imported;
     sections = newTab.sections;
 
     const defaultIdx = tabs.findIndex(t => t.title === 'default' && t.id !== newTab.id);
-    if (defaultIdx !== -1) tabs.splice(defaultIdx, 1);
+    if (defaultIdx !== -1) {
+      stopSync(tabs[defaultIdx].id);
+      deleteStoredHandle(tabs[defaultIdx].id);
+      tabs.splice(defaultIdx, 1);
+    }
 
     applyTitle('example');
+    applyAutoSaveButton(newTab);
     resetCollapsedState();
     editingId = null;
     saveAllTabs();
@@ -1454,53 +1746,63 @@ function switchToOrCreateDefault() {
   let defaultTab = tabs.find(t => t.title === 'default');
   if (!defaultTab) {
     const dt = DEFAULT_TASKS.map(t => ({ ...t }));
-    defaultTab = { id: 'tab_' + Date.now(), title: 'default', tasks: dt, sections: deriveSections(dt) };
+    defaultTab = { id: 'tab_' + Date.now(), title: 'default', tasks: dt, sections: deriveSections(dt), autoSave: false };
     tabs.push(defaultTab);
   }
   activeTabId = defaultTab.id;
   tasks    = defaultTab.tasks;
   sections = defaultTab.sections || deriveSections(defaultTab.tasks);
   applyTitle('default');
+  applyAutoSaveButton(defaultTab);
   resetCollapsedState();
   editingId = null; renamingSection = null; moveMenuTaskId = null;
   selectedSection = null; allCollapsed = false; updateCollapseBtn();
   saveAllTabs(); renderTabs(); render();
 }
 
-function autoSaveMdData(taskList, titleStr) {
-  const title = (titleStr || 'tasks')
-    .replace(/\.md$/, '')
-    .replace(/_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}$/, '');
-  const now   = new Date();
-  const stamp = now.getFullYear()
-    + '-' + String(now.getMonth() + 1).padStart(2, '0')
-    + '-' + String(now.getDate()).padStart(2, '0')
-    + '_' + String(now.getHours()).padStart(2, '0')
-    + '-' + String(now.getMinutes()).padStart(2, '0');
-  const blob = new Blob([generateMd(taskList, title)], { type: 'text/plain' });
+async function autoSaveMdData(tabId, taskList, titleStr, sectionsList) {
+  const title = (titleStr || 'tasks').replace(/\.md$/, '');
+  const handle = await getStoredHandle(tabId);
+  if (handle) {
+    try {
+      const writable = await handle.createWritable();
+      await writable.write(generateMd(taskList, title, sectionsList));
+      await writable.close();
+      return;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  const blob = new Blob([generateMd(taskList, title, sectionsList)], { type: 'text/markdown' });
   const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement('a'), { href: url, download: `${title}_${stamp}.md` });
-  a.click();
-  URL.revokeObjectURL(url);
+  chrome.downloads.download({ url, filename: title + '.md', saveAs: false, conflictAction: 'overwrite' }, () => {
+    URL.revokeObjectURL(url);
+  });
 }
 
 function autoSaveMd() {
+  const tab   = getActiveTab();
   const title = document.getElementById('bcFile').textContent || 'tasks';
-  autoSaveMdData(tasks, title);
+  if (tab) autoSaveMdData(tab.id, tasks, title, sections);
 }
 
 document.getElementById('clearDoneBtn').addEventListener('click', () => {
-  const activeTitle = getActiveTab()?.title;
+  const activeTab     = getActiveTab();
+  const activeTitle   = activeTab?.title;
+  const tabAutoSave   = !!activeTab?.autoSave;
 
   if (activeTitle === 'default') {
-    if (autoSave && tasks.length > 0) autoSaveMd();
+    if (tabAutoSave && tasks.length > 0) {
+      if (!confirm(tr('clearConfirm'))) return;
+      autoSaveMd();
+    }
     tasks = []; sections = [];
     saveTasks(); render();
     return;
   }
 
   if (activeTitle !== 'example') {
-    if (autoSave) {
+    if (tabAutoSave) {
       if (tasks.length > 0 && !confirm(tr('clearConfirm'))) return;
       if (tasks.length > 0) autoSaveMd();
     } else {
@@ -1508,6 +1810,8 @@ document.getElementById('clearDoneBtn').addEventListener('click', () => {
     }
   }
 
+  stopSync(activeTabId);
+  deleteStoredHandle(activeTabId);
   tabs = tabs.filter(t => t.id !== activeTabId);
   switchToOrCreateDefault();
 });
