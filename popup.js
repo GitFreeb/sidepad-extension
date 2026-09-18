@@ -15,6 +15,7 @@ const I18N = {
     autoSaveLabel:        '↓auto',
     autoSaveOnTitle:      'Автосохранение включено',
     autoSaveOffTitle:     'Автосохранение выключено',
+    autoSavePendingTitle: 'Автосохранение приостановлено — нажмите, чтобы подтвердить доступ к файлу',
     syncFileGoneAlert:    'Файл недоступен, синхронизация остановлена.',
     syncMismatchConfirm:  'Выбранный файл содержит другой список ({fileCount} задач) — на экране сейчас {localCount}. Заменить текущий список содержимым файла?',
     moveToTitle:          'Переместить в секцию',
@@ -49,6 +50,7 @@ const I18N = {
     autoSaveLabel:        '↓auto',
     autoSaveOnTitle:      'Auto-save enabled',
     autoSaveOffTitle:     'Auto-save disabled',
+    autoSavePendingTitle: 'Auto-save paused — click to reconfirm file access',
     syncFileGoneAlert:    'File is unavailable, sync stopped.',
     syncMismatchConfirm:  'The selected file has a different list ({fileCount} tasks) — the screen currently shows {localCount}. Replace the current list with the file\'s content?',
     moveToTitle:          'Move to section',
@@ -193,11 +195,12 @@ let selectedSection = null;
 let allCollapsed = false;
 
 function applyAutoSaveButton(tab) {
-  const on  = !!tab?.autoSave;
+  const on      = !!tab?.autoSave;
+  const pending = on && pendingReconnect.has(tab.id);
   const btn = document.getElementById('autoSaveBtn');
   if (btn) {
-    btn.textContent = tr('autoSaveLabel');
-    btn.title       = on ? tr('autoSaveOnTitle') : tr('autoSaveOffTitle');
+    btn.textContent = tr('autoSaveLabel') + (pending ? ' ⚠' : '');
+    btn.title       = pending ? tr('autoSavePendingTitle') : (on ? tr('autoSaveOnTitle') : tr('autoSaveOffTitle'));
     btn.classList.toggle('off', !on);
   }
 }
@@ -420,7 +423,7 @@ function migrateDefaultSection(tab) {
 }
 
 function loadAll() {
-  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang'], (data) => {
+  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang'], async (data) => {
     applyTheme(!!data.lightMode);
     applyLang(data.lang || 'en', false);
 
@@ -438,8 +441,6 @@ function loadAll() {
       activeTabId = 'tab_default';
     }
 
-    tabs.forEach(t => { t.autoSave = false; });
-
     const active = getActiveTab() || tabs[0];
     activeTabId = active.id;
     tasks    = active.tasks;
@@ -450,7 +451,47 @@ function loadAll() {
     renderTabs();
     render();
     checkForUpdate();
+
+    await restoreAutoSync();
+    applyAutoSaveButton(getActiveTab());
   });
+}
+
+async function restoreAutoSync() {
+  // Боковая панель выгружается из памяти при каждом сворачивании — сюда мы
+  // попадаем, как при обычном первом запуске. requestPermission() требует
+  // user gesture, которого на загрузке страницы нет, поэтому тут только
+  // queryPermission (тихая проверка, без диалога). Если доступ уже не
+  // 'granted', вкладка остаётся autoSave = true (это осознанное намерение
+  // пользователя, а не наша догадка), но попадает в pendingReconnect —
+  // живая синхронизация не стартует, пока пользователь не кликнёт по
+  // ↓auto сам: клик даёт нужный gesture для requestPermission (см.
+  // обработчик #autoSaveBtn).
+  if (!window.showOpenFilePicker) return;
+  for (const tab of tabs) {
+    if (!tab.autoSave) continue;
+    // Один упавший handle (например, IndexedDB недоступна) не должен
+    // обрывать восстановление остальных вкладок — поэтому try/catch внутри
+    // цикла, а не вокруг него целиком.
+    try {
+      const handle = await getStoredHandle(tab.id);
+      if (!handle) {
+        tab.autoSave = false;
+        continue;
+      }
+      const granted = (await handle.queryPermission({ mode: 'readwrite' })) === 'granted';
+      if (granted) {
+        const ok = await startSync(tab, handle);
+        if (!ok) tab.autoSave = false;
+      } else {
+        pendingReconnect.add(tab.id);
+      }
+    } catch (e) {
+      console.error(e);
+      pendingReconnect.add(tab.id);
+    }
+  }
+  saveAllTabs();
 }
 
 function saveTasks() {
@@ -483,16 +524,18 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
   const tab = getActiveTab();
   if (!tab || tab.title === 'example') return;
 
-  if (tab.autoSave) {
+  if (tab.autoSave && !pendingReconnect.has(tab.id)) {
     tab.autoSave = false;
     stopSync(tab.id);
     applyAutoSaveButton(tab);
+    saveAllTabs();
     return;
   }
 
   if (!window.showOpenFilePicker) {
     tab.autoSave = true;
     applyAutoSaveButton(tab);
+    saveAllTabs();
     return;
   }
 
@@ -544,9 +587,10 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
       }
     }
     const ok = await startSync(tab, handle);
-    if (!ok) return;
-    tab.autoSave = true;
+    pendingReconnect.delete(tab.id);
+    tab.autoSave = ok;
     applyAutoSaveButton(tab);
+    saveAllTabs();
   } catch (e) {
     if (e.name !== 'AbortError') console.error(e);
   }
@@ -788,8 +832,10 @@ async function writeTabToHandle(handle, tab) {
 
 /* ── Live sync (poll + debounced write) ── */
 const syncState = new Map(); // tabId -> { handle, pollTimer, writeTimer, lastKnownMtime }
+const pendingReconnect = new Set(); // tabId -> autoSave включён, но requestPermission ждёт клика (см. restoreAutoSync)
 
 function stopSync(tabId) {
+  pendingReconnect.delete(tabId);
   const state = syncState.get(tabId);
   if (!state) return;
   clearInterval(state.pollTimer);
@@ -803,6 +849,7 @@ function stopSyncWithAlert(tabId) {
   if (tab) {
     tab.autoSave = false;
     if (tabId === activeTabId) applyAutoSaveButton(tab);
+    saveAllTabs();
   }
   alert(tr('syncFileGoneAlert'));
 }
@@ -946,6 +993,7 @@ document.getElementById('exportBtn').addEventListener('click', async () => {
       if (tab && !(await startSync(tab, handle))) {
         tab.autoSave = false;
         applyAutoSaveButton(tab);
+        saveAllTabs();
       }
     }
   } catch (e) {
