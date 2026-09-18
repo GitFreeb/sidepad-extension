@@ -553,6 +553,51 @@ function parseMd(content, fileName) {
   return result;
 }
 
+/* ── File handle persistence (IndexedDB) ── */
+const HANDLE_DB_NAME = 'sidepad-handles';
+const HANDLE_STORE    = 'handles';
+
+function openHandleDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HANDLE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(HANDLE_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function getStoredHandle(tabId) {
+  const db = await openHandleDB();
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(HANDLE_STORE, 'readonly');
+    const req = tx.objectStore(HANDLE_STORE).get(tabId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function setStoredHandle(tabId, handle) {
+  const db = await openHandleDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, 'readwrite');
+    tx.objectStore(HANDLE_STORE).put(handle, tabId);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+async function deleteStoredHandle(tabId) {
+  const db = await openHandleDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, 'readwrite');
+    tx.objectStore(HANDLE_STORE).delete(tabId);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
 /* ── File import ── */
 let lastFileHandle = null;
 
