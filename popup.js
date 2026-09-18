@@ -479,7 +479,7 @@ document.getElementById('langBtn').addEventListener('click', () => {
 
 document.getElementById('autoSaveBtn').addEventListener('click', async () => {
   const tab = getActiveTab();
-  if (!tab) return;
+  if (!tab || tab.title === 'example') return;
 
   if (tab.autoSave) {
     tab.autoSave = false;
@@ -735,8 +735,9 @@ function generateMd(taskList, titleStr) {
 }
 
 async function writeTabToHandle(handle, tab) {
+  const content  = generateMd(tab.tasks, tab.title.replace(/\.md$/, ''));
   const writable = await handle.createWritable();
-  await writable.write(generateMd(tab.tasks, tab.title.replace(/\.md$/, '')));
+  await writable.write(content);
   await writable.close();
 }
 
@@ -765,25 +766,31 @@ async function pollTab(tabId) {
   const state = syncState.get(tabId);
   const tab   = tabs.find(t => t.id === tabId);
   if (!state || !tab) return;
-  if (tabId === activeTabId && (editingId !== null || renamingSection !== null || moveMenuTaskId !== null)) return;
+  const busyEditing = () => tabId === activeTabId &&
+    (editingId !== null || renamingSection !== null || moveMenuTaskId !== null || dragType !== null);
+  if (busyEditing()) return;
   try {
     const file = await state.handle.getFile();
     if (file.lastModified === state.lastKnownMtime) return;
-    state.lastKnownMtime = file.lastModified;
 
-    const parsed = parseMd(await file.text(), tab.title);
+    const text = await file.text();
+    // Re-check: the user may have started editing/renaming/dragging during
+    // the I/O above, after the guard at the top of this function already
+    // passed. parseMd() не сохраняет id задач между раундами разбора
+    // markdown — применение чужого изменения во время правки осиротило бы
+    // editingId и saveEdit() молча потерял бы недописанную правку, а во
+    // время drag сломало бы перетаскивание (render() отрывает узел от DOM).
+    if (busyEditing()) return;
+
+    const parsed = parseMd(text, tab.title);
     tab.tasks    = parsed;
     tab.sections = deriveSections(parsed);
+    state.lastKnownMtime = file.lastModified; // advance only after a successful apply
 
     if (tabId === activeTabId) {
       tasks    = tab.tasks;
       sections = tab.sections;
       resetCollapsedState();
-      // parseMd() не сохраняет id задач между раундами разбора markdown —
-      // применение чужого изменения во время правки осиротило бы editingId
-      // и saveEdit() молча потерял бы недописанную правку. Поэтому всё
-      // применение (не только render()) целиком откладывается до следующего
-      // опроса, когда пользователь уже не находится в режиме редактирования.
       render();
     }
     saveAllTabs(); // не saveTasks() — иначе применение чужого изменения тут же спровоцирует запись обратно в файл
@@ -797,13 +804,23 @@ async function startSync(tab, handle) {
   stopSync(tab.id);
   const state = { handle, pollTimer: null, writeTimer: null, lastKnownMtime: null };
   try {
-    const file = await handle.getFile();
+    const file    = await handle.getFile();
+    const parsed  = parseMd(await file.text(), tab.title);
+    tab.tasks     = parsed;
+    tab.sections  = deriveSections(parsed);
     state.lastKnownMtime = file.lastModified;
   } catch (e) {
     console.error(e);
     return false;
   }
   syncState.set(tab.id, state);
+  if (tab.id === activeTabId) {
+    tasks    = tab.tasks;
+    sections = tab.sections;
+    resetCollapsedState();
+    render();
+  }
+  saveAllTabs();
   state.pollTimer = setInterval(() => pollTab(tab.id), 2000);
   return true;
 }
@@ -854,6 +871,10 @@ document.getElementById('exportBtn').addEventListener('click', async () => {
     const handle = await window.showSaveFilePicker(opts);
     lastFileHandle = handle;
     await setStoredHandle(activeTabId, handle);
+    if (syncState.has(activeTabId)) {
+      const tab = getActiveTab();
+      if (tab) await startSync(tab, handle);
+    }
     const writable = await handle.createWritable();
     await writable.write(generateMd());
     await writable.close();
@@ -987,7 +1008,7 @@ async function loadExample() {
     const current = getActiveTab();
     if (current) { current.tasks = tasks; current.sections = sections; }
 
-    const newTab = { id: 'tab_' + Date.now(), title: 'example', tasks: imported, sections: deriveSections(imported) };
+    const newTab = { id: 'tab_' + Date.now(), title: 'example', tasks: imported, sections: deriveSections(imported), autoSave: false };
     tabs.push(newTab);
     activeTabId = newTab.id;
     tasks    = imported;
@@ -1001,6 +1022,7 @@ async function loadExample() {
     }
 
     applyTitle('example');
+    applyAutoSaveButton(newTab);
     resetCollapsedState();
     editingId = null;
     saveAllTabs();
@@ -1700,7 +1722,10 @@ document.getElementById('clearDoneBtn').addEventListener('click', () => {
   const tabAutoSave   = !!activeTab?.autoSave;
 
   if (activeTitle === 'default') {
-    if (tabAutoSave && tasks.length > 0) autoSaveMd();
+    if (tabAutoSave && tasks.length > 0) {
+      if (!confirm(tr('clearConfirm'))) return;
+      autoSaveMd();
+    }
     tasks = []; sections = [];
     saveTasks(); render();
     return;
