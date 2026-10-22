@@ -6,7 +6,17 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="app">
+  <div class="modebar">
+    <span class="modebar-title">Sidepad</span>
+    <span class="api-mode-hint" id="apiModeHint" hidden></span>
+    <label class="api-mode-switch" for="apiModeToggle">
+      <input type="checkbox" id="apiModeToggle">
+      <span>Notes API</span>
+      <span class="experimental-badge">dev</span>
+    </label>
+  </div>
+
+  <div class="app" id="legacyMode">
 
     <!-- Tab bar -->
     <div class="tabbar">
@@ -71,8 +81,47 @@
     <ul class="task-list" id="taskList"></ul>
 
 
-</div>
+  </div>
+
+  <div class="app api-app" id="apiMode" hidden>
+    <div class="api-heading">
+      <div>
+        <div class="api-title">notes.md</div>
+        <div class="api-meta" id="apiMeta">No confirmed snapshot</div>
+      </div>
+      <span class="api-status" id="apiStatus">loading</span>
+    </div>
+
+    <div class="api-notice" id="apiNotice" role="status" aria-live="polite"></div>
+
+    <div class="api-actions">
+      <button type="button" id="apiRefreshBtn">↻ refresh</button>
+      <button type="button" id="apiRetryBtn" hidden>retry same operation</button>
+      <button type="button" id="apiCopyDraftBtn">copy draft</button>
+      <button type="button" class="api-reset" id="apiResetBtn">reset API mode</button>
+    </div>
+
+    <form class="api-task-form" id="apiTaskForm">
+      <label>
+        Section
+        <select id="apiSectionSelect"></select>
+      </label>
+      <label>
+        New task
+        <input type="text" id="apiTaskInput" maxlength="240" autocomplete="off">
+      </label>
+      <label>
+        URL (optional)
+        <input type="url" id="apiUrlInput" autocomplete="off">
+      </label>
+      <button type="submit" id="apiSubmitBtn">add via API</button>
+    </form>
+
+    <div class="api-document" id="apiDocument"></div>
+  </div>
+
   <div id="toast" class="toast"></div>
   <script src="popup.js"></script>
+  <script type="module" src="popup-api.js"></script>
 </body>
 </html>

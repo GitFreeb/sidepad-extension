@@ -20,6 +20,7 @@ A Chrome side panel for managing task lists in Markdown format. Works as a nativ
 - [Tabs](#tabs)
 - [Import and Export](#import-and-export)
 - [Cross-Browser Sync](#cross-browser-sync)
+- [Experimental Notes API Mode](#experimental-notes-api-mode)
 - [Drag and Drop](#drag-and-drop)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Data Storage](#data-storage)
@@ -31,7 +32,7 @@ A Chrome side panel for managing task lists in Markdown format. Works as a nativ
 
 **Sidepad** is a Chrome extension that opens a side panel with a task list. The panel works alongside any browser tab without closing it. Tasks are stored locally in the browser and read/saved in Markdown (`.md`) format.
 
-The extension requires no registration, sends no data over the network, has no dependencies, and requires no build step.
+The default legacy mode requires no registration and sends task data only to files selected by the user. An experimental, off-by-default Notes API mode is available for development; it is described separately below. The extension has no dependencies and requires no build step.
 
 ---
 
@@ -326,6 +327,8 @@ There are exactly three ways to turn auto-save off: clicking `↓auto` manually,
 
 Two browsers (e.g. Chrome and Brave) can keep the same tab's list in sync live, through a shared file on disk — no server, no account, no network traffic beyond your own filesystem.
 
+This is the unchanged legacy file mode. It remains the default while the Notes API client is experimental.
+
 ### How it Works
 
 1. In the first browser, click **↓auto** on the tab you want to sync and pick the file to use (or connect to one you already export to).
@@ -344,6 +347,27 @@ Connecting the empty `default` tab to an existing file automatically renames it 
 - Connecting a tab that already has tasks to a file with *different* content asks for confirmation first — it never silently replaces your list.
 - `↓auto` resets to off every time you reopen the panel, in both browsers — sync only runs while you've explicitly turned it on for the current session.
 - Sync is one file per tab and doesn't merge simultaneous edits from both sides — whichever write reaches the file last wins. It's meant for one person switching between two browsers, not concurrent editing by multiple people.
+
+---
+
+## Experimental Notes API Mode
+
+The **Notes API · dev** switch exposes an isolated development client for the future single-writer Notes Lab architecture. It is off by default. While it is off, Sidepad does not request the optional `https://notes.lab/*` host permission, create an API transport, or send Notes API requests. Existing tabs, `FileSystemFileHandle` records, import/export and `↓auto` behavior are unchanged.
+
+Enabling the switch is an explicit user gesture that requests access only to `https://notes.lab/*`. No live backend, production credential or auth mechanism is included in this release branch. The injected client contract uses:
+
+Turn off `↓auto` on all legacy tabs before enabling API mode. The switch refuses activation while any tab has file autosave enabled, including after the panel reopens.
+
+- conditional `GET /api/v1/document` with `ETag` / `304`;
+- semantic operations at `/api/v1/document/operations`, never a full Markdown document;
+- `expected_revision` and a stable `operation_id` on every mutation;
+- explicit locked states for `401` / `403` and conflict state for `409`;
+- a last confirmed snapshot for offline read-only display, with no offline writes, queue or automatic replay;
+- manual retry of an uncertain mutation with the original `operation_id`.
+
+The current dev UI intentionally offers only a small structured **create task** form. On a stale revision it preserves the local draft and requires refresh plus a new explicit submit. If a mutation response is lost, retry is manual and preserves the exact operation ID. Turning the mode off or choosing **reset API mode** clears only its snapshot, draft and session state and removes its optional host permission; legacy tabs and file handles are not migrated or deleted.
+
+For S03, `/api/v1/document/operations` and the `task.create` JSON shape are a mock client contract. The backend and authentication flow are not implemented yet; they must be agreed and tested before any live integration. The existing legacy update checker may still fetch the public Sidepad version manifest from GitHub, independently of Notes API mode.
 
 ---
 
@@ -386,7 +410,7 @@ Grab a **section header** and drag it onto another header — the section with a
 
 ## Data Storage
 
-All data is stored in `chrome.storage.local` — locally in the browser, with no network transmission.
+Legacy tab data is stored in `chrome.storage.local`. Experimental API state uses separate `notesApi*V1` keys and contains only the last confirmed snapshot, a local draft and (when needed) an uncertain semantic operation; it stores no credential.
 
 **Storage structure:**
 
@@ -420,7 +444,7 @@ Files connected via `↓auto` or `↓ export` are referenced through [`FileSyste
 | Parameter | Value |
 |---|---|
 | Manifest version | V3 |
-| Permissions | `storage`, `sidePanel`, `downloads` |
+| Permissions | `storage`, `sidePanel`, `downloads`; optional `https://notes.lab/*` |
 | Dependencies | none |
 | Build | not required |
 | Stack | Vanilla JS, HTML, CSS |
@@ -436,6 +460,11 @@ Sidepad/
 ├── popup.html          — UI markup
 ├── popup.css           — styles
 ├── popup.js            — all logic
+├── popup-api.js        — experimental API UI boundary
+├── notes-api-client.js — revisioned client and injected transport
+├── notes-api-state.js  — pure client state machine
+├── notes-api-mode.js   — permission/cache/session controller
+├── tests/              — Node unit and legacy-boundary tests
 ├── default.md          — empty default list
 ├── example.md          — usage example for new users
 ├── README.md           — documentation (English)

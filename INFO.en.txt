@@ -20,10 +20,11 @@ TABLE OF CONTENTS
   8.  Tabs
   9.  Import and Export
   10. Cross-Browser Sync
-  11. Drag and Drop
-  12. Keyboard Shortcuts
-  13. Data Storage
-  14. Technical Details
+  11. Experimental Notes API Mode
+  12. Drag and Drop
+  13. Keyboard Shortcuts
+  14. Data Storage
+  15. Technical Details
 
 
 WHAT IS IT
@@ -33,8 +34,10 @@ list. The panel works alongside any browser tab without closing it.
 Tasks are stored locally in the browser and read/saved in Markdown
 (.md) format.
 
-The extension requires no registration, sends no data over the
-network, has no dependencies, and requires no build step.
+Default legacy mode requires no registration and sends task data only
+to files selected by the user. An off-by-default experimental Notes
+API mode is available for development. The extension has no
+dependencies and requires no build step.
 
 
 FEATURES
@@ -368,6 +371,9 @@ Two browsers (e.g. Chrome and Brave) can keep the same tab's list in
 sync live, through a shared file on disk — no server, no account, no
 network traffic beyond your own filesystem.
 
+This is the unchanged legacy file mode. It remains the default while
+the Notes API client is experimental.
+
   How it Works
   1. In the first browser, click ↓auto on the tab you want to sync
      and pick the file to use (or connect to one you already export
@@ -400,6 +406,42 @@ network traffic beyond your own filesystem.
     from both sides — whichever write reaches the file last wins.
     It's meant for one person switching between two browsers, not
     concurrent editing by multiple people.
+
+
+EXPERIMENTAL NOTES API MODE
+---------------------------
+
+The Notes API · dev switch exposes an isolated development client for
+the future single-writer Notes Lab architecture. It is off by default.
+While off, Sidepad does not request the optional https://notes.lab/*
+host permission, create an API transport, or send Notes API requests.
+Existing tabs, FileSystemFileHandle records, import/export and ↓auto
+behavior remain unchanged.
+
+Enabling it explicitly requests only https://notes.lab/*. This branch
+contains no live backend, production credential or selected auth
+mechanism. The client uses conditional GET with ETag/304 and sends
+semantic operations with expected_revision and stable operation_id;
+it never sends a full Markdown document.
+
+Turn off ↓auto on every legacy tab first. The switch refuses to activate
+while any legacy tab has file autosave enabled, including after reopen.
+
+401/403 locks the client. 409 shows a conflict and preserves the local
+draft. A network failure shows the last confirmed snapshot read-only:
+there are no offline writes, hidden queue or automatic replay. If a
+mutation response is lost, retry is manual and uses the original
+operation_id.
+
+The development UI currently provides a small structured create-task
+form. Turning the mode off or choosing reset API mode clears only API
+snapshot/draft/session state and removes the optional host permission.
+Legacy tabs and file handles are not migrated or deleted.
+
+For S03, the operations path and task.create JSON shape are a mock
+client contract. Backend and authentication are not implemented yet.
+The existing legacy update checker can still fetch the public Sidepad
+version manifest from GitHub, independently of Notes API mode.
 
 
 DRAG AND DROP
@@ -438,8 +480,8 @@ KEYBOARD SHORTCUTS
 
 DATA STORAGE
 ------------
-All data is stored in chrome.storage.local — locally in the browser,
-with no network transmission.
+Legacy tab data is stored in chrome.storage.local. Experimental API
+state uses separate notesApi*V1 keys and stores no credential.
 
   Storage structure:
 
@@ -475,7 +517,8 @@ TECHNICAL DETAILS
 -----------------
 
   Manifest version   V3
-  Permissions        storage, sidePanel, downloads
+  Permissions        storage, sidePanel, downloads; optional
+                     https://notes.lab/*
   Dependencies       none
   Build              not required
   Stack              Vanilla JS, HTML, CSS
@@ -490,6 +533,11 @@ TECHNICAL DETAILS
       ├── popup.html          — UI markup
       ├── popup.css           — styles
       ├── popup.js            — all logic
+      ├── popup-api.js        — experimental API UI boundary
+      ├── notes-api-client.js — revisioned client and transport
+      ├── notes-api-state.js  — pure API state machine
+      ├── notes-api-mode.js   — permission/cache/session controller
+      ├── tests/              — Node unit and boundary tests
       ├── default.md          — empty default list
       ├── example.md          — usage example for new users
       ├── README.md           — documentation (English)
