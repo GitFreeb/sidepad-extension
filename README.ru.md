@@ -17,6 +17,7 @@
 - [Вкладки](#вкладки)
 - [Импорт и экспорт](#импорт-и-экспорт)
 - [Синхронизация между браузерами](#синхронизация-между-браузерами)
+- [Экспериментальный режим Notes API](#экспериментальный-режим-notes-api)
 - [Перетаскивание](#перетаскивание)
 - [Горячие клавиши](#горячие-клавиши)
 - [Хранение данных](#хранение-данных)
@@ -28,7 +29,7 @@
 
 **Sidepad** — расширение для Chrome, которое открывает боковую панель со списком задач. Панель работает поверх любой вкладки браузера, не закрывая её. Задачи хранятся локально в браузере, читаются и сохраняются в формате Markdown (`.md`).
 
-Расширение не требует регистрации, не отправляет данные в сеть, не имеет зависимостей и не нуждается в сборке.
+Legacy-режим не требует регистрации и отправляет данные только в выбранные пользователем файлы. Экспериментальный режим Notes API по умолчанию выключен и описан отдельно ниже. Расширение не имеет зависимостей и не нуждается в сборке.
 
 ---
 
@@ -344,6 +345,36 @@
 
 ---
 
+## Экспериментальный режим Notes API
+
+Переключатель **Notes API · dev** открывает изолированный клиент Notes Lab с единственным writer. По умолчанию он выключен: Sidepad не запрашивает optional permission `https://notes.lab/*`, не создаёт API transport и не отправляет Notes API запросы. Legacy-вкладки, `FileSystemFileHandle`, import/export и `↓auto` не меняются.
+
+Включение — явный пользовательский жест, который запрашивает доступ только к `https://notes.lab/*`. Сначала выключите `↓auto` на всех legacy-вкладках: при активном файловом autosave режим не включится.
+
+### Pairing и credential
+
+1. Войдите на `https://notes.lab` и создайте одноразовый pairing через authenticated client-management flow.
+2. Вставьте `pairing_id` и одноразовый `code` в Sidepad и задайте label клиента.
+3. Sidepad обменивает их напрямую только с exact `https://notes.lab`. Старый Bearer при exchange не отправляется, redirects запрещены.
+4. Выданный Bearer credential и минимальные metadata сохраняются только в `chrome.storage.local`. Secret не показывается в DOM и не попадает в browser sync, Markdown/file export, logs или draft/session storage.
+
+Credential добавляется только к Notes Lab content requests `/api/v1/*`. Ответ `401` или `403` удаляет отклонённый local secret, блокирует клиент и требует явного re-pair; запросы и mutations автоматически не повторяются. Confirmed snapshot и draft сохраняются. Если уже есть ambiguous mutation, re-pair сохраняет её для ручного retry с тем же `operation_id` и не запускает replay или refresh.
+
+**Disable API mode** очищает snapshot/draft session и снимает optional host permission, но оставляет local credential для следующего явного включения. **Forget local credential / re-pair** удаляет только локальную копию. Это не server revoke: отзыв выполняется через authenticated Notes Lab web flow.
+
+### Безопасность ревизий
+
+- conditional `GET /api/v1/document` с `ETag` / `304`;
+- семантические операции через `/api/v1/document/operations`, никогда не полный Markdown;
+- `expected_revision` и стабильный `operation_id` для каждой mutation;
+- явные locked states для `401` / `403` и conflict для `409`;
+- последний confirmed snapshot только для offline-чтения, без offline writes, очереди или automatic replay;
+- ручной retry ambiguous mutation с исходным `operation_id`.
+
+UI намеренно содержит только небольшую структурированную форму **create task**. При stale revision draft сохраняется и требует refresh плюс нового явного submit. Legacy-вкладки и file handles не мигрируются и не удаляются.
+
+---
+
 ## Перетаскивание
 
 Поддерживается drag & drop для задач и секций.
@@ -383,7 +414,7 @@
 
 ## Хранение данных
 
-Все данные хранятся в `chrome.storage.local` — локально в браузере, без передачи в сеть.
+Legacy-данные хранятся в `chrome.storage.local` и выбранных пользователем файлах. В opt-in Notes API mode подтверждённые snapshots/drafts и Bearer credential хранятся в `chrome.storage.local`; credential не входит в legacy export и используется в сети только для exact `https://notes.lab/api/v1/*`.
 
 **Структура хранилища:**
 
@@ -417,7 +448,7 @@
 | Параметр | Значение |
 |---|---|
 | Manifest версия | V3 |
-| Разрешения | `storage`, `sidePanel`, `downloads` |
+| Разрешения | `storage`, `sidePanel`, `downloads`; optional `https://notes.lab/*` |
 | Зависимости | нет |
 | Сборка | не требуется |
 | Стек | Vanilla JS, HTML, CSS |
@@ -433,6 +464,10 @@ Sidepad/
 ├── popup.html          — разметка интерфейса
 ├── popup.css           — стили
 ├── popup.js            — вся логика
+├── popup-api.js        — изолированная граница Notes API UI
+├── notes-api-auth.js   — local-only pairing и scoped Bearer authorization
+├── notes-api-client.js — revisioned client и injected transport
+├── notes-api-state.js  — чистый state machine клиента
 ├── default.md          — пустой список по умолчанию
 ├── example.md          — пример использования для новых пользователей
 ├── README.md           — документация (English)

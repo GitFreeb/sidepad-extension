@@ -7,6 +7,7 @@ import {
   OfflineError,
   RevisionConflictError,
   RevisionedNotesClient,
+  createFetchTransport,
 } from '../notes-api-client.js';
 
 function jsonResponse(body, status = 200, headers = {}) {
@@ -183,4 +184,34 @@ test('mutations send semantic operations, not a full Markdown document', async (
     expectedRevision: 'rev-2',
     operation: { type: 'replace', markdown: '# Notes' },
   }), /not allowed/);
+});
+
+test('fetch transport gives the authorizer exact request metadata and refuses cross-origin paths', async () => {
+  const authorizations = [];
+  const requests = [];
+  const transport = createFetchTransport({
+    baseUrl: 'https://notes.lab',
+    authorize: async (init, context) => {
+      authorizations.push(context);
+      return init;
+    },
+    fetchImpl: async (url, init) => {
+      requests.push({ url, init });
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  await transport.request({ path: '/api/v1/document', method: 'GET' });
+
+  assert.deepEqual(authorizations, [{
+    resource: 'content',
+    url: 'https://notes.lab/api/v1/document',
+  }]);
+  assert.equal(requests[0].url, 'https://notes.lab/api/v1/document');
+  assert.equal(requests[0].init.redirect, 'error');
+  await assert.rejects(
+    transport.request({ path: 'https://example.com/api/v1/document', method: 'GET' }),
+    /cross-origin/i,
+  );
+  assert.equal(requests.length, 1);
 });

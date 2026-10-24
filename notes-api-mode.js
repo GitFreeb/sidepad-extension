@@ -21,11 +21,12 @@ function savedSession(state) {
 }
 
 export class NotesApiMode {
-  constructor({ storage, permissions, clientFactory, originPermission, now = () => new Date().toISOString() }) {
+  constructor({ storage, permissions, clientFactory, originPermission, auth = null, now = () => new Date().toISOString() }) {
     this.storage = storage;
     this.permissions = permissions;
     this.clientFactory = clientFactory;
     this.originPermission = originPermission;
+    this.auth = auth;
     this.now = now;
     this.enabled = false;
     this.client = null;
@@ -44,7 +45,11 @@ export class NotesApiMode {
   }
 
   snapshot() {
-    return { enabled: this.enabled, state: this.state };
+    return {
+      enabled: this.enabled,
+      state: this.state,
+      auth: this.auth?.snapshot?.() || null,
+    };
   }
 
   emit() {
@@ -80,6 +85,15 @@ export class NotesApiMode {
     }
     this.enabled = true;
     this.epoch += 1;
+    if (this.auth) await this.auth.init();
+    if (this.auth && !this.auth.hasCredential()) {
+      if (!session.pendingMutation) {
+        this.state = reduceApiState(this.state, { type: 'AUTH_REQUIRED' });
+      }
+      await this.persistSession();
+      this.emit();
+      return;
+    }
     this.client = this.clientFactory();
     this.emit();
     if (session.pendingMutation) return;
@@ -101,9 +115,17 @@ export class NotesApiMode {
     }
     this.enabled = true;
     this.epoch += 1;
-    this.client = this.clientFactory();
     this.state = createApiState();
     await this.storage.set({ [API_MODE_STORAGE_KEY]: true });
+    if (this.auth) await this.auth.init();
+    if (this.auth && !this.auth.hasCredential()) {
+      this.client = null;
+      this.state = reduceApiState(this.state, { type: 'AUTH_REQUIRED' });
+      await this.persistSession();
+      this.emit();
+      return true;
+    }
+    this.client = this.clientFactory();
     this.emit();
     await this.refresh();
     return true;
@@ -167,6 +189,7 @@ export class NotesApiMode {
     } catch (error) {
       if (this.epoch !== epoch) return false;
       if (error instanceof AuthRequiredError) {
+        await this.rejectAuth(error.status);
         this.state = reduceApiState(this.state, { type: 'AUTH_REQUIRED' });
       } else if (error instanceof OfflineError) {
         this.state = reduceApiState(this.state, { type: 'LOAD_OFFLINE' });
@@ -187,6 +210,55 @@ export class NotesApiMode {
     this.state = reduceApiState(this.state, { type: 'DRAFT_CHANGED', draft });
     await this.persistSession();
     this.emit();
+  }
+
+  async pair(pairing) {
+    if (!this.enabled || !this.auth) return false;
+    const epoch = this.epoch;
+    const exchange = this.auth.exchange(pairing);
+    this.emit();
+    try {
+      await exchange;
+    } catch (error) {
+      if (this.epoch === epoch) this.emit();
+      throw error;
+    }
+    if (this.epoch !== epoch || !this.auth.hasCredential()) return false;
+    this.client = this.clientFactory();
+    if (this.state.conflictReason === 'ambiguous' && this.state.pendingMutation) {
+      await this.persistSession();
+      if (this.epoch === epoch) this.emit();
+      return this.epoch === epoch;
+    }
+    this.state = reduceApiState(this.state, { type: 'AUTH_RECOVERY_START' });
+    await this.persistSession();
+    if (this.epoch !== epoch) return false;
+    this.emit();
+    return this.refresh();
+  }
+
+  async resetAuth() {
+    if (!this.enabled || !this.auth) return false;
+    this.epoch += 1;
+    this.loading = false;
+    this.client = null;
+    await this.auth.reset();
+    if (!(this.state.conflictReason === 'ambiguous' && this.state.pendingMutation)) {
+      this.state = reduceApiState(this.state, { type: 'AUTH_REQUIRED' });
+    }
+    await this.persistSession();
+    this.emit();
+    return true;
+  }
+
+  async rejectAuth(status) {
+    this.client = null;
+    if (!this.auth) return;
+    try {
+      await this.auth.rejectCredential(status);
+    } catch {
+      // The in-memory secret is already gone; keep the client locked even if persistence failed.
+    }
   }
 
   async submit(operation) {
@@ -241,6 +313,7 @@ export class NotesApiMode {
       } else if (error instanceof AmbiguousMutationError) {
         this.state = reduceApiState(priorState, { type: 'SAVE_AMBIGUOUS', mutation: error.mutation });
       } else if (error instanceof AuthRequiredError) {
+        await this.rejectAuth(error.status);
         this.state = reduceApiState(priorState, { type: 'AUTH_REQUIRED' });
       } else {
         throw error;
