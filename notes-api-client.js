@@ -89,17 +89,24 @@ export function createFetchTransport({ baseUrl, fetchImpl = globalThis.fetch, au
   if (!baseUrl) throw new TypeError('baseUrl is required.');
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl must be a function.');
 
-  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  const normalizedBaseUrl = new URL(baseUrl);
   return {
     async request({ path, method, headers = {}, body }) {
+      const url = new URL(path, normalizedBaseUrl);
+      if (url.origin !== normalizedBaseUrl.origin) {
+        throw new TypeError('Cross-origin Notes API transport paths are not allowed.');
+      }
       let init = {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
         cache: 'no-store',
+        redirect: 'error',
       };
-      if (authorize) init = await authorize(init);
-      return fetchImpl(`${normalizedBaseUrl}${path}`, init);
+      if (authorize) {
+        init = await authorize(init, { resource: 'content', url: url.href });
+      }
+      return fetchImpl(url.href, init);
     },
   };
 }

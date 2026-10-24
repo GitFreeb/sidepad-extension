@@ -49,6 +49,14 @@ export function reduceApiState(state, event) {
       return { ...state, phase: API_PHASES.OFFLINE_READ_ONLY, pendingMutation: null };
     case 'AUTH_REQUIRED':
       return { ...state, phase: API_PHASES.AUTH_REQUIRED, pendingMutation: null };
+    case 'AUTH_RECOVERY_START':
+      return {
+        ...state,
+        phase: API_PHASES.LOADING,
+        pendingMutation: null,
+        conflictReason: null,
+        currentRevision: null,
+      };
     case 'DRAFT_CHANGED':
       if (state.phase === API_PHASES.OFFLINE_READ_ONLY || state.phase === API_PHASES.AUTH_REQUIRED || state.phase === API_PHASES.SAVING) {
         return state;

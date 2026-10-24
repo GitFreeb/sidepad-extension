@@ -92,13 +92,47 @@
       <span class="api-status" id="apiStatus">loading</span>
     </div>
 
+    <section class="api-auth" id="apiAuthPanel" data-phase="missing">
+      <div class="api-auth-heading">
+        <strong>Notes Lab connection</strong>
+        <span id="apiAuthState">credential missing</span>
+      </div>
+      <p class="api-auth-help" id="apiAuthHelp">
+        Sign in at https://notes.lab and create a one-time pairing through its authenticated client-management flow.
+        Sidepad cannot create a pairing itself; paste the pairing ID and one-time code below.
+      </p>
+      <form class="api-pairing-form" id="apiPairingForm" autocomplete="off">
+        <label>
+          Pairing ID
+          <input type="text" id="apiPairingIdInput" spellcheck="false" autocomplete="off" required>
+        </label>
+        <label>
+          One-time code
+          <input type="password" id="apiPairingCodeInput" spellcheck="false" autocomplete="new-password" required>
+        </label>
+        <label>
+          Client label
+          <input type="text" id="apiPairingLabelInput" value="Sidepad" maxlength="80" autocomplete="off" required>
+        </label>
+        <button type="submit" id="apiPairBtn">pair Sidepad</button>
+      </form>
+      <div class="api-auth-current" id="apiAuthCurrent" hidden>
+        <span id="apiAuthMeta">Paired locally</span>
+        <span>The saved Bearer secret is never displayed.</span>
+      </div>
+      <div class="api-auth-reset-row">
+        <button type="button" id="apiForgetAuthBtn">forget local credential / re-pair</button>
+        <span>Forgetting it here does not revoke the server credential. Revoke it in the authenticated Notes Lab web flow.</span>
+      </div>
+    </section>
+
     <div class="api-notice" id="apiNotice" role="status" aria-live="polite"></div>
 
     <div class="api-actions">
       <button type="button" id="apiRefreshBtn">↻ refresh</button>
       <button type="button" id="apiRetryBtn" hidden>retry same operation</button>
       <button type="button" id="apiCopyDraftBtn">copy draft</button>
-      <button type="button" class="api-reset" id="apiResetBtn">reset API mode</button>
+      <button type="button" class="api-reset" id="apiResetBtn" title="The local credential stays on this device">disable API mode</button>
     </div>
 
     <form class="api-task-form" id="apiTaskForm">

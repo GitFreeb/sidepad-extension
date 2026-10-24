@@ -352,11 +352,22 @@ Connecting the empty `default` tab to an existing file automatically renames it 
 
 ## Experimental Notes API Mode
 
-The **Notes API · dev** switch exposes an isolated development client for the future single-writer Notes Lab architecture. It is off by default. While it is off, Sidepad does not request the optional `https://notes.lab/*` host permission, create an API transport, or send Notes API requests. Existing tabs, `FileSystemFileHandle` records, import/export and `↓auto` behavior are unchanged.
+The **Notes API · dev** switch exposes an isolated client for the single-writer Notes Lab architecture. It is off by default. While it is off, Sidepad does not request the optional `https://notes.lab/*` host permission, create an API transport, or send Notes API requests. Existing tabs, `FileSystemFileHandle` records, import/export and `↓auto` behavior are unchanged.
 
-Enabling the switch is an explicit user gesture that requests access only to `https://notes.lab/*`. No live backend, production credential or auth mechanism is included in this release branch. The injected client contract uses:
+Enabling the switch is an explicit user gesture that requests access only to `https://notes.lab/*`. Turn off `↓auto` on all legacy tabs first; the switch refuses activation while any tab has file autosave enabled, including after the panel reopens.
 
-Turn off `↓auto` on all legacy tabs before enabling API mode. The switch refuses activation while any tab has file autosave enabled, including after the panel reopens.
+### Pairing and credentials
+
+1. Sign in at `https://notes.lab` and create a one-time pairing through its authenticated client-management flow.
+2. Paste the `pairing_id` and one-time `code` into Sidepad and choose a client label.
+3. Sidepad exchanges them directly with exact `https://notes.lab`. The exchange never sends an old Bearer credential and redirects are rejected.
+4. The issued Bearer credential and minimal metadata are saved only in `chrome.storage.local`. The secret is never shown in the DOM and is not included in browser sync, Markdown/file export, logs or draft/session storage.
+
+The credential is attached only to Notes Lab `/api/v1/*` content requests. A `401` or `403` removes the rejected local secret, locks the client and requires explicit re-pairing; it does not retry a request or replay a mutation. The confirmed snapshot and draft remain available. If an uncertain mutation already exists, re-pairing preserves it for the existing manual same-`operation_id` retry and does not replay or refresh automatically.
+
+**Disable API mode** clears its snapshot/draft session and removes the optional host permission, but retains the local credential for the next explicit enable. **Forget local credential / re-pair** deletes the local copy only. It does not revoke the server credential; revoke that credential through the authenticated Notes Lab web flow.
+
+### Revision safety
 
 - conditional `GET /api/v1/document` with `ETag` / `304`;
 - semantic operations at `/api/v1/document/operations`, never a full Markdown document;
@@ -365,9 +376,7 @@ Turn off `↓auto` on all legacy tabs before enabling API mode. The switch refus
 - a last confirmed snapshot for offline read-only display, with no offline writes, queue or automatic replay;
 - manual retry of an uncertain mutation with the original `operation_id`.
 
-The current dev UI intentionally offers only a small structured **create task** form. On a stale revision it preserves the local draft and requires refresh plus a new explicit submit. If a mutation response is lost, retry is manual and preserves the exact operation ID. Turning the mode off or choosing **reset API mode** clears only its snapshot, draft and session state and removes its optional host permission; legacy tabs and file handles are not migrated or deleted.
-
-For S03, `/api/v1/document/operations` and the `task.create` JSON shape are a mock client contract. The backend and authentication flow are not implemented yet; they must be agreed and tested before any live integration. The existing legacy update checker may still fetch the public Sidepad version manifest from GitHub, independently of Notes API mode.
+The UI intentionally offers only a small structured **create task** form. On a stale revision it preserves the local draft and requires refresh plus a new explicit submit. If a mutation response is lost, retry is manual and preserves the exact operation ID. Legacy tabs and file handles are not migrated or deleted. The existing legacy update checker may still fetch the public Sidepad version manifest from GitHub, independently of Notes API mode.
 
 ---
 
@@ -461,6 +470,7 @@ Sidepad/
 ├── popup.css           — styles
 ├── popup.js            — all logic
 ├── popup-api.js        — experimental API UI boundary
+├── notes-api-auth.js   — local-only pairing and scoped Bearer authorization
 ├── notes-api-client.js — revisioned client and injected transport
 ├── notes-api-state.js  — pure client state machine
 ├── notes-api-mode.js   — permission/cache/session controller

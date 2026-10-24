@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { NotesApiMode, API_MODE_STORAGE_KEY, API_SESSION_STORAGE_KEY } from '../notes-api-mode.js';
+import { AuthRequiredError } from '../notes-api-client.js';
 
 function createStorage(initial = {}) {
   const data = new Map(Object.entries(initial));
@@ -207,4 +208,263 @@ test('late GET after disabling API mode cannot restore its cleared session', asy
   assert.equal(mode.state.confirmed, null);
   assert.equal(storage.data.has(API_SESSION_STORAGE_KEY), false);
   assert.deepEqual(storage.data.get('tabs'), [{ id: 'legacy' }]);
+});
+
+test('credential-missing enable waits for explicit pairing, then loads without replaying anything', async () => {
+  const storage = createStorage({ tabs: [{ id: 'legacy' }] });
+  const permissions = createPermissions();
+  let paired = false;
+  let clients = 0;
+  let loads = 0;
+  let sends = 0;
+  const auth = {
+    async init() {},
+    hasCredential: () => paired,
+    snapshot: () => ({ phase: paired ? 'current' : 'missing' }),
+    async exchange() { paired = true; return this.snapshot(); },
+    async rejectCredential() { paired = false; },
+    async reset() { paired = false; },
+  };
+  const mode = new NotesApiMode({
+    storage,
+    permissions,
+    auth,
+    originPermission: { origins: ['https://notes.lab/*'] },
+    clientFactory: () => {
+      clients += 1;
+      return {
+        async load() {
+          loads += 1;
+          return { document: { sections: [] }, revision: 'rev-1', etag: '"rev-1"' };
+        },
+        async sendPrepared() { sends += 1; },
+      };
+    },
+  });
+
+  await mode.enable();
+  assert.equal(mode.state.phase, 'auth-required');
+  assert.equal(clients, 0);
+  assert.equal(loads, 0);
+
+  await mode.pair({ pairingId: 'pairing-id', code: 'code', label: 'Sidepad' });
+  assert.equal(mode.state.phase, 'current');
+  assert.equal(clients, 1);
+  assert.equal(loads, 1);
+  assert.equal(sends, 0);
+});
+
+test('restart restores a credential and confirmed snapshot without mutation replay', async () => {
+  const storedSnapshot = {
+    document: { sections: [{ ref: 's1', name: 'Inbox', tasks: [] }] },
+    revision: 'rev-1',
+    etag: '"rev-1"',
+    fetchedAt: '2026-10-24T08:00:00Z',
+  };
+  const storage = createStorage({
+    [API_MODE_STORAGE_KEY]: true,
+    [API_SESSION_STORAGE_KEY]: { snapshot: storedSnapshot, draft: { text: 'kept draft' }, pendingMutation: null },
+  });
+  const permissions = createPermissions();
+  permissions.granted = true;
+  let loads = 0;
+  let sends = 0;
+  const auth = {
+    async init() {},
+    hasCredential: () => true,
+    snapshot: () => ({ phase: 'current', credentialId: 'client-id' }),
+    async rejectCredential() {},
+    async reset() {},
+  };
+  const mode = new NotesApiMode({
+    storage,
+    permissions,
+    auth,
+    originPermission: { origins: ['https://notes.lab/*'] },
+    clientFactory: () => ({
+      async load({ etag }) {
+        loads += 1;
+        assert.equal(etag, '"rev-1"');
+        return { notModified: true, etag };
+      },
+      async sendPrepared() { sends += 1; },
+    }),
+  });
+
+  await mode.init();
+
+  assert.equal(mode.state.phase, 'current');
+  assert.equal(mode.state.confirmed.revision, 'rev-1');
+  assert.deepEqual(mode.state.draft, { text: 'kept draft' });
+  assert.equal(loads, 1);
+  assert.equal(sends, 0);
+});
+
+for (const status of [401, 403]) {
+  test(`mutation ${status} clears rejected auth, preserves the draft and never retries`, async () => {
+    const storage = createStorage({ tabs: [] });
+    const permissions = createPermissions();
+    let rejectedStatus = null;
+    let sends = 0;
+    const auth = {
+      async init() {},
+      hasCredential: () => rejectedStatus === null,
+      snapshot: () => ({ phase: rejectedStatus === null ? 'current' : 'auth-required' }),
+      async rejectCredential(value) { rejectedStatus = value; },
+      async reset() { rejectedStatus = null; },
+    };
+    const client = {
+      async load() {
+        return { document: { sections: [] }, revision: 'rev-1', etag: '"rev-1"' };
+      },
+      prepareMutation: () => ({
+        expectedRevision: 'rev-1',
+        operationId: `op-${status}`,
+        operation: { type: 'task.create' },
+      }),
+      async sendPrepared() {
+        sends += 1;
+        throw new AuthRequiredError(status);
+      },
+    };
+    const mode = new NotesApiMode({
+      storage,
+      permissions,
+      auth,
+      originPermission: { origins: ['https://notes.lab/*'] },
+      clientFactory: () => client,
+    });
+    await mode.enable();
+    await mode.setDraft({ text: 'preserve me' });
+
+    assert.equal(await mode.submit({ type: 'task.create' }), false);
+    assert.equal(rejectedStatus, status);
+    assert.equal(sends, 1);
+    assert.equal(mode.state.phase, 'auth-required');
+    assert.deepEqual(mode.state.draft, { text: 'preserve me' });
+    assert.equal(mode.state.pendingMutation, null);
+    assert.equal(storage.data.get(API_SESSION_STORAGE_KEY).pendingMutation, null);
+  });
+}
+
+test('reset-for-repair deletes only local auth, preserves confirmed state and performs no request', async () => {
+  const storage = createStorage({ tabs: [] });
+  const permissions = createPermissions();
+  let resets = 0;
+  let loads = 0;
+  const auth = {
+    async init() {},
+    hasCredential: () => resets === 0,
+    snapshot: () => ({ phase: resets === 0 ? 'current' : 'missing' }),
+    async reset() { resets += 1; },
+    async rejectCredential() {},
+  };
+  const mode = new NotesApiMode({
+    storage,
+    permissions,
+    auth,
+    originPermission: { origins: ['https://notes.lab/*'] },
+    clientFactory: () => ({
+      async load() {
+        loads += 1;
+        return { document: { sections: [] }, revision: 'rev-1' };
+      },
+    }),
+  });
+  await mode.enable();
+  await mode.setDraft({ text: 'keep this' });
+  await mode.resetAuth();
+
+  assert.equal(resets, 1);
+  assert.equal(loads, 1);
+  assert.equal(mode.state.phase, 'auth-required');
+  assert.equal(mode.state.confirmed.revision, 'rev-1');
+  assert.deepEqual(mode.state.draft, { text: 'keep this' });
+});
+
+test('revoked credential on refresh is removed and locks without losing the confirmed snapshot or draft', async () => {
+  const storage = createStorage({ tabs: [] });
+  const permissions = createPermissions();
+  let loads = 0;
+  let rejectedStatus = null;
+  const auth = {
+    async init() {},
+    hasCredential: () => rejectedStatus === null,
+    snapshot: () => ({ phase: rejectedStatus === null ? 'current' : 'auth-required' }),
+    async rejectCredential(status) { rejectedStatus = status; },
+    async reset() {},
+  };
+  const mode = new NotesApiMode({
+    storage,
+    permissions,
+    auth,
+    originPermission: { origins: ['https://notes.lab/*'] },
+    clientFactory: () => ({
+      async load() {
+        loads += 1;
+        if (loads === 2) throw new AuthRequiredError(401);
+        return { document: { sections: [] }, revision: 'rev-1', etag: '"rev-1"' };
+      },
+    }),
+  });
+  await mode.enable();
+  await mode.setDraft({ text: 'still here' });
+
+  await mode.refresh();
+
+  assert.equal(loads, 2);
+  assert.equal(rejectedStatus, 401);
+  assert.equal(mode.state.phase, 'auth-required');
+  assert.equal(mode.state.confirmed.revision, 'rev-1');
+  assert.deepEqual(mode.state.draft, { text: 'still here' });
+});
+
+test('re-pairing with an ambiguous mutation restores auth but never replays or refreshes automatically', async () => {
+  const storage = createStorage({ tabs: [] });
+  const permissions = createPermissions();
+  let paired = true;
+  let loads = 0;
+  let sends = 0;
+  const auth = {
+    async init() {},
+    hasCredential: () => paired,
+    snapshot: () => ({ phase: paired ? 'current' : 'missing' }),
+    async exchange() { paired = true; },
+    async reset() { paired = false; },
+    async rejectCredential() { paired = false; },
+  };
+  const client = {
+    async load() {
+      loads += 1;
+      return { document: { sections: [] }, revision: 'rev-1' };
+    },
+    prepareMutation: () => ({
+      expectedRevision: 'rev-1',
+      operationId: 'stable-after-repair',
+      operation: { type: 'task.create' },
+    }),
+    async sendPrepared(mutation) {
+      sends += 1;
+      throw new (await import('../notes-api-client.js')).AmbiguousMutationError(mutation);
+    },
+  };
+  const mode = new NotesApiMode({
+    storage,
+    permissions,
+    auth,
+    originPermission: { origins: ['https://notes.lab/*'] },
+    clientFactory: () => client,
+  });
+  await mode.enable();
+  await mode.setDraft({ text: 'uncertain draft' });
+  await mode.submit({ type: 'task.create' });
+  assert.equal(mode.state.conflictReason, 'ambiguous');
+  await mode.resetAuth();
+
+  await mode.pair({ pairingId: 'fresh', code: 'fresh', label: 'Sidepad' });
+
+  assert.equal(mode.state.conflictReason, 'ambiguous');
+  assert.equal(mode.state.pendingMutation.operationId, 'stable-after-repair');
+  assert.equal(loads, 1);
+  assert.equal(sends, 1);
 });

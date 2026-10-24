@@ -411,35 +411,47 @@ the Notes API client is experimental.
 EXPERIMENTAL NOTES API MODE
 ---------------------------
 
-The Notes API · dev switch exposes an isolated development client for
-the future single-writer Notes Lab architecture. It is off by default.
+The Notes API · dev switch exposes an isolated client for the
+single-writer Notes Lab architecture. It is off by default.
 While off, Sidepad does not request the optional https://notes.lab/*
 host permission, create an API transport, or send Notes API requests.
 Existing tabs, FileSystemFileHandle records, import/export and ↓auto
 behavior remain unchanged.
 
-Enabling it explicitly requests only https://notes.lab/*. This branch
-contains no live backend, production credential or selected auth
-mechanism. The client uses conditional GET with ETag/304 and sends
-semantic operations with expected_revision and stable operation_id;
-it never sends a full Markdown document.
+Enabling it explicitly requests only https://notes.lab/*. Turn off
+↓auto on every legacy tab first; the switch refuses to activate while
+any legacy tab has file autosave enabled, including after reopen.
 
-Turn off ↓auto on every legacy tab first. The switch refuses to activate
-while any legacy tab has file autosave enabled, including after reopen.
+Sign in at https://notes.lab and create a one-time pairing through its
+authenticated client-management flow. Paste the pairing_id and one-time
+code into Sidepad. Sidepad exchanges them only with exact
+https://notes.lab, without an old Bearer and without following redirects.
 
-401/403 locks the client. 409 shows a conflict and preserves the local
-draft. A network failure shows the last confirmed snapshot read-only:
-there are no offline writes, hidden queue or automatic replay. If a
-mutation response is lost, retry is manual and uses the original
-operation_id.
+The issued Bearer and minimal metadata are stored only in
+chrome.storage.local. The secret is never displayed and is excluded
+from browser sync, Markdown/file export, logs and draft/session storage.
+It is attached only to https://notes.lab/api/v1/* content requests.
+
+401/403 removes the rejected local secret and locks the client without
+retry or mutation replay. The confirmed snapshot and draft stay intact.
+Re-pairing is explicit. An already ambiguous mutation stays available
+only for manual retry with its original operation_id and is never
+replayed or refreshed automatically.
+
+The client uses conditional GET with ETag/304 and sends semantic
+operations with expected_revision and stable operation_id; it never
+sends a full Markdown document. 409 shows a conflict and preserves the
+local draft. A network failure shows the last confirmed snapshot
+read-only: there are no offline writes, hidden queue or automatic replay.
 
 The development UI currently provides a small structured create-task
-form. Turning the mode off or choosing reset API mode clears only API
-snapshot/draft/session state and removes the optional host permission.
-Legacy tabs and file handles are not migrated or deleted.
+form. Disable API mode clears API snapshot/draft/session state and
+removes the optional host permission, but retains the local credential.
+Forget local credential / re-pair deletes only the local copy; it does
+not revoke the server credential. Revoke through the authenticated
+Notes Lab web flow. Legacy tabs and file handles are not migrated or
+deleted.
 
-For S03, the operations path and task.create JSON shape are a mock
-client contract. Backend and authentication are not implemented yet.
 The existing legacy update checker can still fetch the public Sidepad
 version manifest from GitHub, independently of Notes API mode.
 
@@ -533,6 +545,10 @@ TECHNICAL DETAILS
       ├── popup.html          — UI markup
       ├── popup.css           — styles
       ├── popup.js            — all logic
+      ├── popup-api.js        — isolated Notes API UI boundary
+      ├── notes-api-auth.js   — local-only pairing and Bearer auth
+      ├── notes-api-client.js — revisioned client and transport
+      ├── notes-api-state.js  — client state machine
       ├── popup-api.js        — experimental API UI boundary
       ├── notes-api-client.js — revisioned client and transport
       ├── notes-api-state.js  — pure API state machine

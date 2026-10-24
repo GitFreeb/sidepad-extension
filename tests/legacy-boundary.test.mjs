@@ -27,3 +27,10 @@ test('manifest grants no Notes API host access until the optional permission is 
   assert.equal(manifest.permissions.includes('https://notes.lab/*'), false);
   assert.deepEqual(manifest.optional_host_permissions, ['https://notes.lab/*']);
 });
+
+test('pairing UI explains local reset versus server revoke and has no credential field', async () => {
+  const html = await readFile(new URL('popup.html', root), 'utf8');
+  assert.match(html, /one-time pairing/i);
+  assert.match(html, /does not revoke/i);
+  assert.doesNotMatch(html, /id=["'][^"']*credential/i);
+});

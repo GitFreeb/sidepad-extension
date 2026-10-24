@@ -422,36 +422,48 @@ Notes API для разработки по умолчанию выключен. 
 ЭКСПЕРИМЕНТАЛЬНЫЙ РЕЖИМ NOTES API
 ---------------------------------
 
-Переключатель Notes API · dev открывает изолированный клиент для
-будущей архитектуры Notes Lab с единственным writer. Режим по
+Переключатель Notes API · dev открывает изолированный клиент
+архитектуры Notes Lab с единственным writer. Режим по
 умолчанию выключен. Пока он выключен, Sidepad не запрашивает optional
 host permission https://notes.lab/*, не создаёт API transport и не
 отправляет запросы Notes API. Существующие вкладки,
 FileSystemFileHandle, import/export и ↓auto не меняются.
 
-Явное включение запрашивает доступ только к https://notes.lab/*. В
-этой ветке нет live backend, production credential или выбранного
-механизма auth. Клиент использует conditional GET с ETag/304 и
-отправляет только семантические операции с expected_revision и
-стабильным operation_id, но никогда не полный Markdown-документ.
-
-Перед включением отключите ↓auto на всех legacy-вкладках. Переключатель
+Явное включение запрашивает доступ только к https://notes.lab/*. Перед
+включением отключите ↓auto на всех legacy-вкладках. Переключатель
 не активируется, пока хотя бы у одной включено файловое автосохранение,
 в том числе после повторного открытия панели.
 
-401/403 блокирует клиент. 409 показывает конфликт и сохраняет локальный
-черновик. При потере сети показывается последний подтверждённый snapshot
-только для чтения: offline-записей, скрытой очереди и автоматического
-replay нет. При потере ответа мутации ручной retry использует исходный
-operation_id.
+Войдите на https://notes.lab и создайте одноразовый pairing через
+authenticated client-management flow. Вставьте pairing_id и одноразовый
+code в Sidepad. Sidepad обменивает их только с exact https://notes.lab,
+без старого Bearer и без следования redirects.
+
+Выданный Bearer и минимальные metadata хранятся только в
+chrome.storage.local. Secret не показывается и не попадает в browser
+sync, Markdown/file export, logs или draft/session storage. Он
+добавляется только к content requests https://notes.lab/api/v1/*.
+
+401/403 удаляет отклонённый local secret и блокирует клиент без retry
+или mutation replay. Confirmed snapshot и draft сохраняются. Re-pair
+выполняется явно. Уже ambiguous mutation остаётся только для ручного
+retry с исходным operation_id и никогда не replay/refresh автоматически.
+
+Клиент использует conditional GET с ETag/304 и отправляет только
+семантические операции с expected_revision и стабильным operation_id,
+но никогда не полный Markdown-документ. 409 показывает конфликт и
+сохраняет draft. При потере сети показывается последний confirmed
+snapshot только для чтения: offline-записей, скрытой очереди и
+automatic replay нет.
 
 Текущий dev UI предоставляет только небольшую структурированную форму
-создания задачи. Выключение режима или reset API mode очищает только
-API snapshot/draft/session и снимает optional host permission. Legacy
-вкладки и файловые handles не мигрируются и не удаляются.
+создания задачи. Disable API mode очищает API snapshot/draft/session и
+снимает optional host permission, но сохраняет local credential. Forget
+local credential / re-pair удаляет только локальную копию и не выполняет
+server revoke; отзыв делается через authenticated Notes Lab web flow.
+Legacy-вкладки и файловые handles не мигрируются и не удаляются.
 
-Для S03 путь операций и JSON-форма task.create являются mock-контрактом
-клиента. Backend и auth ещё не реализованы. Существующая проверка
+Существующая проверка
 обновлений legacy-режима может обращаться к публичному manifest Sidepad
 на GitHub независимо от режима Notes API.
 
@@ -545,6 +557,10 @@ state использует отдельные ключи notesApi*V1 и не х�
       ├── popup.html          — разметка интерфейса
       ├── popup.css           — стили
       ├── popup.js            — вся логика
+      ├── popup-api.js        — изолированная граница Notes API UI
+      ├── notes-api-auth.js   — local-only pairing и Bearer auth
+      ├── notes-api-client.js — revisioned client и transport
+      ├── notes-api-state.js  — state machine клиента
       ├── popup-api.js        — граница experimental API UI
       ├── notes-api-client.js — revisioned client и transport
       ├── notes-api-state.js  — чистая API state machine

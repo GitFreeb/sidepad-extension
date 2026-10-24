@@ -157,12 +157,128 @@ body {
 }
 
 .api-status[data-phase="conflict"],
-.api-status[data-phase="auth-required"] {
+.api-status[data-phase="auth-required"],
+.api-status[data-phase="credential-missing"] {
   border-color: color-mix(in srgb, var(--danger) 55%, transparent);
   color: var(--danger);
 }
 
 .api-status[data-phase="offline-read-only"] {
+  border-color: var(--input-border);
+  color: var(--text-muted);
+}
+
+.api-auth {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 72%, var(--bg));
+}
+
+.api-auth-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.api-auth-heading span {
+  color: var(--accent);
+  font: 9.5px var(--font-mono);
+}
+
+.api-auth[data-phase="auth-required"] .api-auth-heading span,
+.api-auth[data-phase="missing"] .api-auth-heading span {
+  color: var(--danger);
+}
+
+.api-auth-help {
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.api-pairing-form {
+  display: grid;
+  grid-template-columns: 1.35fr 0.8fr;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.api-pairing-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.api-pairing-form label:nth-child(3) { grid-column: 1 / -1; }
+
+.api-pairing-form input {
+  min-width: 0;
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font: 10.5px var(--font-mono);
+}
+
+.api-pairing-form input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.api-pairing-form button,
+.api-auth-reset-row button {
+  justify-self: start;
+  padding: 5px 8px;
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font: 10px var(--font-ui);
+  cursor: pointer;
+}
+
+.api-pairing-form button:disabled,
+.api-pairing-form input:disabled,
+.api-auth-reset-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.api-auth-current {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.api-auth-current span:first-child {
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.api-auth-reset-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.api-auth-reset-row button {
+  flex: 0 0 auto;
   border-color: var(--input-border);
   color: var(--text-muted);
 }

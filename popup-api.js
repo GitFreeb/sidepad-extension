@@ -1,7 +1,7 @@
 import { createFetchTransport, RevisionedNotesClient } from './notes-api-client.js';
 import { NotesApiMode } from './notes-api-mode.js';
+import { NOTES_ORIGIN, NotesApiAuth, PairingError } from './notes-api-auth.js';
 
-const NOTES_ORIGIN = 'https://notes.lab';
 const ORIGIN_PERMISSION = { origins: [`${NOTES_ORIGIN}/*`] };
 
 function storageGet(keys) {
@@ -40,16 +40,23 @@ function permissionCall(method, permission) {
   });
 }
 
+const localStorage = { get: storageGet, set: storageSet, remove: storageRemove };
+const auth = new NotesApiAuth({ storage: localStorage });
+
 const mode = new NotesApiMode({
-  storage: { get: storageGet, set: storageSet, remove: storageRemove },
+  storage: localStorage,
   permissions: {
     contains: (permission) => permissionCall('contains', permission),
     request: (permission) => permissionCall('request', permission),
     remove: (permission) => permissionCall('remove', permission),
   },
   originPermission: ORIGIN_PERMISSION,
+  auth,
   clientFactory: () => new RevisionedNotesClient({
-    transport: createFetchTransport({ baseUrl: NOTES_ORIGIN }),
+    transport: createFetchTransport({
+      baseUrl: NOTES_ORIGIN,
+      authorize: (init, context) => auth.authorizeContentRequest(init, context),
+    }),
   }),
 });
 
@@ -60,6 +67,18 @@ const elements = {
   api: document.getElementById('apiMode'),
   status: document.getElementById('apiStatus'),
   meta: document.getElementById('apiMeta'),
+  authPanel: document.getElementById('apiAuthPanel'),
+  authState: document.getElementById('apiAuthState'),
+  authHelp: document.getElementById('apiAuthHelp'),
+  pairingForm: document.getElementById('apiPairingForm'),
+  pairingId: document.getElementById('apiPairingIdInput'),
+  pairingCode: document.getElementById('apiPairingCodeInput'),
+  pairingLabel: document.getElementById('apiPairingLabelInput'),
+  pair: document.getElementById('apiPairBtn'),
+  authCurrent: document.getElementById('apiAuthCurrent'),
+  authMeta: document.getElementById('apiAuthMeta'),
+  authResetRow: document.querySelector('.api-auth-reset-row'),
+  forgetAuth: document.getElementById('apiForgetAuthBtn'),
   notice: document.getElementById('apiNotice'),
   refresh: document.getElementById('apiRefreshBtn'),
   retry: document.getElementById('apiRetryBtn'),
@@ -129,7 +148,19 @@ function renderSectionOptions(snapshot, selectedName) {
   else if (selectedName) elements.section.value = '';
 }
 
-function noticeFor(state) {
+function noticeFor(state, authState) {
+  if (authState?.phase === 'pairing') {
+    return 'Exchanging the one-time pairing directly with Notes Lab. The code is not stored.';
+  }
+  if (authState?.phase !== 'current' && state.conflictReason === 'ambiguous') {
+    return 'Pairing is required. The uncertain operation and draft are preserved and will not replay automatically; retry remains manual.';
+  }
+  if (authState?.phase === 'auth-required') {
+    return 'Locked · the saved credential was rejected and removed locally. Re-pair explicitly; no request or mutation is retried.';
+  }
+  if (authState?.phase === 'missing') {
+    return 'Credential missing · create a one-time pairing in the authenticated Notes Lab flow, then connect here.';
+  }
   if (state.phase === 'loading') return 'Loading the current revision. Editing stays locked until it is confirmed.';
   if (state.phase === 'saving') return 'Saving one semantic operation with the confirmed revision.';
   if (state.phase === 'offline-read-only') return 'Offline · read-only. Showing the last confirmed snapshot; no operation is queued.';
@@ -150,16 +181,43 @@ function updateFormFromDraft(draft) {
   if (draft.sectionName) elements.section.value = draft.sectionName;
 }
 
-function render({ enabled, state }) {
+function render({ enabled, state, auth: authState }) {
   elements.toggle.checked = enabled;
-  if (enabled) elements.hint.hidden = true;
+  if (enabled) {
+    elements.hint.hidden = true;
+  } else if (authState?.phase === 'current') {
+    elements.hint.textContent = 'API off · local credential retained';
+    elements.hint.hidden = false;
+  }
   elements.legacy.hidden = enabled;
   elements.api.hidden = !enabled;
   if (!enabled) return;
 
-  elements.status.textContent = state.phase;
-  elements.status.dataset.phase = state.phase;
-  elements.notice.textContent = noticeFor(state);
+  const authPhase = authState?.phase || 'missing';
+  const displayPhase = authPhase === 'current'
+    ? state.phase
+    : authPhase === 'missing' ? 'credential-missing' : authPhase;
+  elements.status.textContent = displayPhase;
+  elements.status.dataset.phase = displayPhase;
+  elements.notice.textContent = noticeFor(state, authState);
+  elements.authPanel.dataset.phase = authPhase;
+  elements.authState.textContent = authPhase === 'current'
+    ? 'current'
+    : authPhase === 'pairing' ? 'pairing…' : authPhase === 'auth-required' ? 'auth required' : 'credential missing';
+  const pairing = authPhase === 'pairing';
+  const current = authPhase === 'current';
+  elements.authHelp.hidden = current;
+  elements.pairingForm.hidden = current;
+  [elements.pairingId, elements.pairingCode, elements.pairingLabel, elements.pair].forEach((element) => {
+    element.disabled = pairing;
+  });
+  elements.authCurrent.hidden = !current;
+  elements.authResetRow.hidden = authPhase === 'missing' || pairing;
+  const credentialId = authState?.credentialId;
+  const scopes = Array.isArray(authState?.scopes) ? authState.scopes.join(' · ') : '';
+  elements.authMeta.textContent = credentialId
+    ? `client ${credentialId.slice(0, 8)}…${scopes ? ` · ${scopes}` : ''}`
+    : 'Paired locally';
   const revision = state.confirmed?.revision;
   const fetchedAt = state.confirmed?.fetchedAt;
   elements.meta.textContent = revision
@@ -170,14 +228,14 @@ function render({ enabled, state }) {
   updateFormFromDraft(state.draft);
   renderDocument(state.confirmed);
 
-  const canWrite = state.phase === 'current' && Boolean(revision);
+  const canWrite = authPhase === 'current' && state.phase === 'current' && Boolean(revision);
   const canEditDraft = canWrite || (state.phase === 'conflict' && state.conflictReason === 'revision');
   [elements.section, elements.task, elements.url].forEach((element) => { element.disabled = !canEditDraft; });
   elements.submit.disabled = !canWrite || !elements.task.value.trim() || !elements.section.value;
-  elements.refresh.disabled = state.phase === 'loading' || state.phase === 'saving';
+  elements.refresh.disabled = authPhase !== 'current' || state.phase === 'loading' || state.phase === 'saving';
   if (state.conflictReason === 'ambiguous') elements.refresh.disabled = true;
   elements.retry.hidden = state.conflictReason !== 'ambiguous';
-  elements.retry.disabled = state.phase !== 'conflict';
+  elements.retry.disabled = state.phase !== 'conflict' || authPhase !== 'current';
   elements.copyDraft.disabled = !state.draft;
 }
 
@@ -232,6 +290,38 @@ elements.reset.addEventListener('click', async () => {
     showLocalError();
   }
 });
+
+elements.pairingForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const pairing = {
+    pairingId: elements.pairingId.value.trim(),
+    code: elements.pairingCode.value,
+    label: elements.pairingLabel.value.trim(),
+  };
+  try {
+    const attempt = mode.pair(pairing);
+    elements.pairingId.value = '';
+    elements.pairingCode.value = '';
+    await attempt;
+  } catch (error) {
+    if (!(error instanceof PairingError)) {
+      showLocalError();
+      return;
+    }
+    const messages = {
+      'invalid-input': 'Enter the complete pairing ID, one-time code and a label up to 80 characters.',
+      'invalid-or-expired': 'The pairing is invalid, expired or already used. Create a new one in Notes Lab.',
+      'origin-forbidden': 'Notes Lab rejected this extension origin. Pairing remains locked.',
+      offline: 'Notes Lab is unavailable. No pairing data was saved; try again manually.',
+      'invalid-response': 'Notes Lab returned an invalid pairing response. No credential was saved.',
+      'storage-failed': 'The issued credential could not be saved locally. Revoke it in Notes Lab and create a new pairing.',
+      'service-unavailable': 'Notes Lab could not complete pairing. Try again manually.',
+    };
+    elements.notice.textContent = messages[error.reason] || 'Pairing failed safely. Try again manually.';
+  }
+});
+
+elements.forgetAuth.addEventListener('click', () => mode.resetAuth().catch(showLocalError));
 
 [elements.section, elements.task, elements.url].forEach((element) => {
   element.addEventListener('input', () => mode.setDraft(currentDraft()).catch(showLocalError));
