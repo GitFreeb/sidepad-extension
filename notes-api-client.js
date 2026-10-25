@@ -102,6 +102,7 @@ export function createFetchTransport({ baseUrl, fetchImpl = globalThis.fetch, au
         body: body === undefined ? undefined : JSON.stringify(body),
         cache: 'no-store',
         redirect: 'error',
+        targetAddressSpace: 'local',
       };
       if (authorize) {
         init = await authorize(init, { resource: 'content', url: url.href });

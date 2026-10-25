@@ -209,6 +209,7 @@ test('fetch transport gives the authorizer exact request metadata and refuses cr
   }]);
   assert.equal(requests[0].url, 'https://notes.lab/api/v1/document');
   assert.equal(requests[0].init.redirect, 'error');
+  assert.equal(requests[0].init.targetAddressSpace, 'local');
   await assert.rejects(
     transport.request({ path: 'https://example.com/api/v1/document', method: 'GET' }),
     /cross-origin/i,

@@ -67,6 +67,7 @@ test('pairing success uses the exact Notes Lab exchange without an old Bearer an
   assert.equal(requests[0].init.method, 'POST');
   assert.equal(requests[0].init.credentials, 'omit');
   assert.equal(requests[0].init.redirect, 'error');
+  assert.equal(requests[0].init.targetAddressSpace, 'local');
   assert.equal(requests[0].init.headers.Authorization, undefined);
   assert.deepEqual(JSON.parse(requests[0].init.body), {
     pairing_id: '22222222-2222-4222-8222-222222222222',

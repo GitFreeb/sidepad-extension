@@ -138,6 +138,7 @@ export class NotesApiAuth {
         credentials: 'omit',
         redirect: 'error',
         referrerPolicy: 'no-referrer',
+        targetAddressSpace: 'local',
       });
     } catch (cause) {
       this.phase = 'missing';
