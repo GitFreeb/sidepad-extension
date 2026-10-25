@@ -47,7 +47,8 @@ test('pairing success uses the exact Notes Lab exchange without an old Bearer an
   const auth = new NotesApiAuth({
     storage,
     now: () => '2026-10-24T08:00:00Z',
-    fetchImpl: async (url, init) => {
+    fetchImpl: async function fetchWithNativeReceiverContract(url, init) {
+      assert.equal(this, undefined);
       requests.push({ url, init });
       return jsonResponse(issued);
     },

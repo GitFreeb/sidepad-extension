@@ -78,7 +78,7 @@ export class NotesApiAuth {
     }
     if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl must be a function.');
     this.storage = storage;
-    this.fetchImpl = fetchImpl;
+    this.fetchImpl = (...args) => fetchImpl(...args);
     this.now = now;
     this.phase = 'missing';
     this.record = null;
