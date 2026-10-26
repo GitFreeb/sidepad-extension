@@ -87,6 +87,7 @@ body {
 }
 
 .modebar-title {
+  margin-right: auto;
   color: var(--text);
   font-weight: 650;
   letter-spacing: 0.35px;
@@ -123,7 +124,6 @@ body {
 }
 
 .modebar-btn {
-  margin-left: auto;
   margin-right: 8px;
   padding: 1px 6px;
   border: 1px solid var(--border);
@@ -134,7 +134,6 @@ body {
   cursor: pointer;
 }
 
-.modebar-btn + .modebar-btn { margin-left: 0; }
 .modebar-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
 
 /* Настройки Notes API — оверлей под modebar, чтобы не сдвигать список */

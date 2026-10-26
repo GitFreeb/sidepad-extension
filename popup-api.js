@@ -522,10 +522,7 @@ el.pairingForm.addEventListener('submit', async (event) => {
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local' || !mode.enabled) return;
   if (changes[API_CREDENTIAL_STORAGE_KEY]) {
-    const wasConnected = authPhase() === 'current';
-    mode.reloadAuth().then(() => {
-      if (!wasConnected && auth.hasCredential()) notify('noticeConnected');
-    }).catch(showLocalError);
+    mode.reloadAuth().catch(showLocalError);
   }
   if (changes[CONNECT_PENDING_STORAGE_KEY]) {
     refreshPending().then(renderChrome).catch(() => {});
