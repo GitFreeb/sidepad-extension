@@ -373,6 +373,31 @@ test('editing survives leaving the panel to copy text, then pasting a full repla
   assert.equal(op().task.text, 'pasted replacement');
 });
 
+test('copying another task with ⧉ and pasting it over an inbox task saves on Enter', { skip }, async () => {
+  await settle();
+  const source = await page.evaluate(`__t.model().find((s) => s.name === 'Inbox').tasks.find((t) => t.startsWith('[ ] ')).slice(4)`);
+  const target = await page.evaluate(`__t.model()[0].tasks.find((t) => t.startsWith('[ ] ') && t.length < 200).slice(4)`);
+  await page.evaluate(`__t.task(${JSON.stringify(source)}).querySelector('.btn-copy').click()`);
+  await page.evaluate(`__t.task(${JSON.stringify(target)}).querySelector('.task-text').click()`);
+  await page.waitFor(`document.querySelector('.task-edit-input') === document.activeElement`);
+  await page.evaluate(`document.querySelector('.task-edit-input').select()`);
+  await page.send('Input.insertText', { text: source });
+  await page.evaluate(`__t.key('.task-edit-input', 'Enter')`);
+  await page.waitFor(`__t.model()[0].tasks.includes('[ ] ' + ${JSON.stringify(source)})`, { timeout: 6000 });
+  assert.equal(op().type, 'task.update');
+});
+
+test('pasting text with tabs, double spaces and a link still saves instead of reverting', { skip }, async () => {
+  await settle();
+  const target = await page.evaluate(`__t.model()[0].tasks.find((t) => t.startsWith('[ ] ') && t.length < 200).slice(4)`);
+  await page.evaluate(`__t.task(${JSON.stringify(target)}).querySelector('.task-text').click()`);
+  await page.evaluate(`document.querySelector('.task-edit-input').select()`);
+  await page.send('Input.insertText', { text: 'Позвонить\tпо  поводу встречи https://example.test/meet' });
+  await page.evaluate(`__t.key('.task-edit-input', 'Enter')`);
+  await page.waitFor(`__t.task('Позвонить по поводу встречи') !== undefined`, { timeout: 6000 });
+  assert.equal(await page.evaluate(`__t.task('Позвонить по поводу встречи').querySelector('.task-link').textContent`), 'https://example.test/meet');
+});
+
 test('✕ clear on notes.md only closes the local tab after confirmation and sends no mutation', { skip }, async () => {
   await settle();
   const count = fake.mutations().length;
