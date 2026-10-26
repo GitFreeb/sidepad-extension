@@ -17,6 +17,39 @@ export class StaleIntentError extends Error {
   }
 }
 
+// Markdown store Notes Lab отклоняет в тексте задачи табуляцию, переводы
+// строк, управляющие символы, двойные пробелы и ссылки (у ссылки своё поле).
+// Вставленный текст приводится к этим правилам, иначе сервер вернёт 400 и
+// правка молча откатится к прежнему тексту.
+const URL_IN_TEXT = /https?:\/\/[^\s<>"{}|\\^`[\]]+/i;
+
+function collapseWhitespace(value) {
+  return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function normalizeTaskInput(rawText, rawUrl = null) {
+  let text = collapseWhitespace(rawText);
+  let url = cleanUrl(rawUrl);
+  const match = text.match(URL_IN_TEXT);
+  if (match) {
+    const found = match[0].replace(/[),>.;:!?]+$/, '');
+    url = url || found;
+    text = collapseWhitespace(text.replace(match[0], ' ').replace(/\s+([,.;:!?])/g, '$1').replace(/^[,.;:!?\s]+|[,;:\s]+$/g, ''));
+    if (!text) {
+      try {
+        text = new URL(found).host;
+      } catch {
+        text = '';
+      }
+    }
+  }
+  return { text, url };
+}
+
+export function normalizeSectionName(raw) {
+  return collapseWhitespace(String(raw ?? '').replace(/^[\s#]+/, ''));
+}
+
 function cleanUrl(value) {
   const text = String(value ?? '').trim();
   return text || null;
@@ -82,19 +115,19 @@ function requireSection(document, name) {
   return name;
 }
 
-function taskPayload(text, url) {
+function taskPayload(rawText, rawUrl) {
+  const { text, url } = normalizeTaskInput(rawText, rawUrl);
   const payload = { text };
-  const cleaned = cleanUrl(url);
-  if (cleaned) payload.url = cleaned;
+  if (url) payload.url = url;
   return payload;
 }
 
 export function captureIntent(document, intent) {
   switch (intent?.kind) {
     case 'task.create':
-      return { kind: intent.kind, sectionName: intent.sectionName, text: intent.text, url: intent.url || '' };
+      return { kind: intent.kind, sectionName: normalizeSectionName(intent.sectionName), text: intent.text, url: intent.url || '' };
     case 'section.create':
-      return { kind: intent.kind, name: intent.name };
+      return { kind: intent.kind, name: normalizeSectionName(intent.name) };
     case 'task.toggle':
     case 'task.delete':
       return { kind: intent.kind, target: locateTask(document, intent.id) };
@@ -109,7 +142,7 @@ export function captureIntent(document, intent) {
         position: intent.position,
       };
     case 'section.update':
-      return { kind: intent.kind, sectionName: requireSection(document, intent.sectionName), name: intent.name };
+      return { kind: intent.kind, sectionName: requireSection(document, intent.sectionName), name: normalizeSectionName(intent.name) };
     case 'section.delete':
       return { kind: intent.kind, sectionName: requireSection(document, intent.sectionName) };
     case 'section.move':
@@ -144,6 +177,7 @@ function planTaskMove(document, intent) {
 export function planOperation(document, intent) {
   switch (intent.kind) {
     case 'task.create': {
+      if (!normalizeTaskInput(intent.text, intent.url).text || !intent.sectionName) return null;
       const existing = document.sections.find((section) => section.name === intent.sectionName);
       if (existing) {
         return { type: 'task.create', section_ref: existing.ref, task: taskPayload(intent.text, intent.url) };
@@ -151,6 +185,7 @@ export function planOperation(document, intent) {
       return { type: 'section.create', section: { name: intent.sectionName }, task: taskPayload(intent.text, intent.url), index: 0 };
     }
     case 'section.create':
+      if (!intent.name) return null;
       if (document.sections.some((section) => section.name === intent.name)) return null;
       return { type: 'section.create', section: { name: intent.name }, index: 0 };
     case 'task.toggle': {
@@ -159,7 +194,8 @@ export function planOperation(document, intent) {
     }
     case 'task.update': {
       const { task } = resolveTask(document, intent.target);
-      return { type: 'task.update', task_ref: task.ref, task: { text: intent.text } };
+      if (!normalizeTaskInput(intent.text, null).text) return null;
+      return { type: 'task.update', task_ref: task.ref, task: taskPayload(intent.text, null) };
     }
     case 'task.delete': {
       const { task } = resolveTask(document, intent.target);

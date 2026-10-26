@@ -14,6 +14,13 @@ class Rejected extends Error {
   }
 }
 
+// Те же правила, что markdown.py::_validate_task_text/_validate_label в Notes Lab.
+function validText(text, { label = false } = {}) {
+  return typeof text === 'string' && text.length > 0 && text.trim() === text
+    && !/[\u0000-\u001f\u007f]/.test(text) && !text.includes('  ')
+    && (label ? !text.startsWith('#') : !/https?:\/\//i.test(text));
+}
+
 function cleanUrl(value) {
   const text = String(value ?? '').trim();
   return text || null;
@@ -164,6 +171,11 @@ export class FakeNotesApi {
   }
 
   apply(op) {
+    const texts = [op.task?.text, op.section?.name && { label: op.section.name }].filter((v) => v !== undefined);
+    for (const value of texts) {
+      const ok = typeof value === 'object' ? validText(value.label, { label: true }) : validText(value);
+      if (!ok) throw new Rejected(400, 'unsupported_markdown');
+    }
     switch (op.type) {
       case 'task.create': {
         const s = this.sectionByRef(op.section_ref);

@@ -142,3 +142,25 @@ test('captureIntent rejects ids and sections that are not in the rendered snapsh
   assert.throws(() => captureIntent(base, { kind: 'section.delete', sectionName: 'Nope' }), StaleIntentError);
   assert.throws(() => captureIntent(base, { kind: 'unknown' }), TypeError);
 });
+
+test('pasted text is normalized to what the Markdown store accepts', async () => {
+  const { normalizeTaskInput, normalizeSectionName } = await import('../notes-api-tab.js');
+  assert.deepEqual(normalizeTaskInput('  first\tsecond  third  end  '), { text: 'first second third end', url: null });
+  assert.deepEqual(normalizeTaskInput('line one\nline two\r\nthree'), { text: 'line one line two three', url: null });
+  assert.deepEqual(normalizeTaskInput('read this https://example.test/a, later'), { text: 'read this later', url: 'https://example.test/a' });
+  assert.deepEqual(normalizeTaskInput('https://example.test/only'), { text: 'example.test', url: 'https://example.test/only' });
+  assert.deepEqual(normalizeTaskInput('text', 'https://example.test/x'), { text: 'text', url: 'https://example.test/x' });
+  assert.deepEqual(normalizeTaskInput(' \t\n '), { text: '', url: null });
+  assert.equal(normalizeSectionName('  ## Plans\tnext  '), 'Plans next');
+});
+
+test('create and update send normalized text and move a pasted URL into the url field', () => {
+  const edit = captureIntent(base, { kind: 'task.update', id: idOf(base, 'two'), text: 'two  edited\twith https://example.test/p' });
+  assert.deepEqual(planOperation(base, edit), { type: 'task.update', task_ref: 't_a_0_1', task: { text: 'two edited with', url: 'https://example.test/p' } });
+  const plain = captureIntent(base, { kind: 'task.update', id: idOf(base, 'two'), text: 'two\nnew' });
+  assert.deepEqual(planOperation(base, plain), { type: 'task.update', task_ref: 't_a_0_1', task: { text: 'two new' } });
+  const create = captureIntent(base, { kind: 'task.create', sectionName: 'Work', text: 'a  b https://example.test/c', url: '' });
+  assert.deepEqual(planOperation(base, create), { type: 'task.create', section_ref: 's_a_1', task: { text: 'a b', url: 'https://example.test/c' } });
+  const section = captureIntent(base, { kind: 'section.update', sectionName: 'Work', name: '#  Job\tnow' });
+  assert.deepEqual(planOperation(base, section), { type: 'section.update', section_ref: 's_a_1', section: { name: 'Job now' } });
+});

@@ -112,6 +112,7 @@ const backend = {
   dispatch(intent) {
     const document = mode.state.confirmed?.document;
     if (!document || !backend.canWrite()) return;
+    if (STICKY_NOTICES.has(ui.notice)) ui.notice = null;
     let captured;
     try {
       captured = captureIntent(document, intent);
@@ -138,10 +139,16 @@ const backend = {
 const NOTICE_MS = 6000;
 let noticeTimer = null;
 
+// Отказ или конфликт остаётся на экране до следующего действия: иначе
+// откат к прежнему тексту выглядит как молча потерянная правка.
+const STICKY_NOTICES = new Set(['noticeStale', 'noticeConflict', 'noticeRejected']);
+
 function notify(key) {
   ui.notice = key;
   clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => { ui.notice = null; renderChrome(); }, NOTICE_MS);
+  if (!STICKY_NOTICES.has(key)) {
+    noticeTimer = setTimeout(() => { ui.notice = null; renderChrome(); }, NOTICE_MS);
+  }
   renderChrome();
 }
 
