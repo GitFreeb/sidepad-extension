@@ -52,20 +52,27 @@ test('disabled mode creates no client, asks no host permission and makes no requ
   assert.deepEqual(storage.data.get('tabs'), [{ id: 'legacy' }]);
 });
 
-test('active legacy file autosave blocks API activation before permission or transport', async () => {
+test('file tabs with auto-save no longer block API mode: they keep syncing next to notes.md', async () => {
   const storage = createStorage({ tabs: [{ id: 'legacy', autoSave: true }] });
   const permissions = createPermissions();
   let clients = 0;
   const mode = new NotesApiMode({
     storage, permissions, originPermission: { origins: ['https://notes.lab/*'] },
-    clientFactory: () => { clients += 1; return {}; },
+    clientFactory: () => { clients += 1; return { load: async () => ({ document: { sections: [] }, revision: 'rev-1' }) }; },
   });
 
-  assert.equal(await mode.enable(), false);
-  assert.equal(mode.lastEnableReason, 'legacy-auto-save');
-  assert.equal(permissions.requestCalls, 0);
-  assert.equal(clients, 0);
-  assert.equal(storage.data.has(API_MODE_STORAGE_KEY), false);
+  assert.equal(await mode.enable(), true);
+  assert.equal(permissions.requestCalls, 1);
+  assert.equal(clients, 1);
+  assert.equal(storage.data.get(API_MODE_STORAGE_KEY), true);
+
+  const restarted = new NotesApiMode({
+    storage, permissions, originPermission: { origins: ['https://notes.lab/*'] },
+    clientFactory: () => ({ load: async () => ({ document: { sections: [] }, revision: 'rev-1' }) }),
+  });
+  await restarted.init();
+  assert.equal(restarted.enabled, true);
+  assert.deepEqual(storage.data.get('tabs'), [{ id: 'legacy', autoSave: true }]);
 });
 
 test('user enable requests the exact permission before constructing transport', async () => {
@@ -467,4 +474,101 @@ test('re-pairing with an ambiguous mutation restores auth but never replays or r
   assert.equal(mode.state.pendingMutation.operationId, 'stable-after-repair');
   assert.equal(loads, 1);
   assert.equal(sends, 1);
+});
+
+function currentMode({ client, storage = createStorage(), auth = null } = {}) {
+  const permissions = createPermissions();
+  return new NotesApiMode({
+    storage, permissions, auth, originPermission: { origins: ['https://notes.lab/*'] }, clientFactory: () => client,
+  });
+}
+
+test('quiet background refresh keeps the tab writable instead of flashing a loading state', async () => {
+  let release;
+  let loads = 0;
+  const client = {
+    load() {
+      loads += 1;
+      if (loads === 1) return Promise.resolve({ document: { sections: [] }, revision: 'rev-1', etag: '"rev-1"' });
+      return new Promise((resolve) => { release = resolve; });
+    },
+  };
+  const mode = currentMode({ client });
+  await mode.enable();
+  const phases = [];
+  mode.subscribe(({ state }) => phases.push(state.phase));
+  const pending = mode.refresh({ quiet: true });
+  await Promise.resolve();
+  assert.equal(mode.state.phase, 'current');
+  release({ notModified: true, etag: '"rev-1"' });
+  await pending;
+  assert.equal(phases.includes('loading'), false);
+  assert.equal(mode.state.confirmed.revision, 'rev-1');
+});
+
+test('a read that started before a write cannot overwrite the newer write result', async () => {
+  let releaseLoad;
+  let loads = 0;
+  const client = {
+    load() {
+      loads += 1;
+      if (loads === 1) return Promise.resolve({ document: { sections: [] }, revision: 'rev-1' });
+      return new Promise((resolve) => { releaseLoad = resolve; });
+    },
+    prepareMutation: ({ expectedRevision, operation }) => ({ expectedRevision, operationId: 'op-1', operation }),
+    sendPrepared: async () => ({ document: { sections: [{ ref: 's', name: 'New', tasks: [] }] }, revision: 'rev-2' }),
+  };
+  const mode = currentMode({ client });
+  await mode.enable();
+  const staleRead = mode.refresh({ quiet: true });
+  await Promise.resolve();
+  assert.equal(await mode.submit({ type: 'section.create', section: { name: 'New' } }), true);
+  releaseLoad({ document: { sections: [] }, revision: 'rev-1' });
+  await staleRead;
+  assert.equal(mode.state.confirmed.revision, 'rev-2');
+});
+
+test('a definite rejection records no pending mutation and lets the client reread', async () => {
+  const { OperationRejectedError } = await import('../notes-api-client.js');
+  let loads = 0;
+  const client = {
+    load: async () => { loads += 1; return { document: { sections: [] }, revision: `rev-${loads}` }; },
+    prepareMutation: ({ expectedRevision, operation }) => ({ expectedRevision, operationId: 'op-1', operation }),
+    sendPrepared: async () => { throw new OperationRejectedError(400, 'validation_error'); },
+  };
+  const mode = currentMode({ client });
+  await mode.enable();
+  assert.equal(await mode.submit({ type: 'task.delete', task_ref: 'x' }), false);
+  assert.equal(mode.state.phase, 'conflict');
+  assert.equal(mode.state.conflictReason, 'rejected');
+  assert.equal(mode.state.pendingMutation, null);
+  assert.equal(await mode.refresh(), true);
+  assert.equal(mode.state.phase, 'current');
+  assert.equal(loads, 2);
+});
+
+test('a credential written by the service worker is picked up without replaying anything', async () => {
+  let paired = false;
+  let loads = 0;
+  let sends = 0;
+  const auth = {
+    async init() {},
+    hasCredential: () => paired,
+    snapshot: () => ({ phase: paired ? 'current' : 'missing' }),
+    async rejectCredential() { paired = false; },
+    async reset() { paired = false; },
+  };
+  const client = {
+    load: async () => { loads += 1; return { document: { sections: [] }, revision: 'rev-1' }; },
+    sendPrepared: async () => { sends += 1; },
+  };
+  const mode = currentMode({ client, auth });
+  await mode.enable();
+  assert.equal(mode.state.phase, 'auth-required');
+  assert.equal(await mode.reloadAuth(), false);
+  paired = true;
+  assert.equal(await mode.reloadAuth(), true);
+  assert.equal(mode.state.phase, 'current');
+  assert.equal(loads, 1);
+  assert.equal(sends, 0);
 });

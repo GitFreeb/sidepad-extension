@@ -1,5 +1,6 @@
 const DOCUMENT_PATH = '/api/v1/document';
 const OPERATIONS_PATH = '/api/v1/document/operations';
+const DEFINITE_REJECTIONS = new Set([400, 404, 413, 415, 422, 429]);
 
 export class NotesApiError extends Error {
   constructor(message, options = {}) {
@@ -25,6 +26,18 @@ export class RevisionConflictError extends NotesApiError {
 export class OfflineError extends NotesApiError {
   constructor(options = {}) {
     super('The Notes API is unavailable.', options);
+  }
+}
+
+export class RateLimitedError extends OfflineError {}
+
+// Сервер точно не применил операцию (валидация, неизвестный ref, повтор
+// operation_id с другим payload): повтор того же запроса бессмыслен.
+export class OperationRejectedError extends NotesApiError {
+  constructor(status, code = null) {
+    super('The Notes API rejected the operation.');
+    this.status = status;
+    this.code = code;
   }
 }
 
@@ -136,6 +149,7 @@ export class RevisionedNotesClient {
     if (response.status === 401 || response.status === 403) {
       throw new AuthRequiredError(response.status);
     }
+    if (response.status === 429) throw new RateLimitedError();
     if (response.status === 503 || response.status === 502 || response.status === 504) {
       throw new OfflineError();
     }
@@ -201,7 +215,14 @@ export class RevisionedNotesClient {
     try {
       if (response.status === 409) {
         const data = await readJson(response);
-        throw new RevisionConflictError(data.current_revision);
+        if (data.current_revision) throw new RevisionConflictError(data.current_revision);
+        const code = data.error?.code || null;
+        if (code === 'operation_in_progress') throw new ProtocolError('The operation is still in progress.');
+        throw new OperationRejectedError(409, code);
+      }
+      if (DEFINITE_REJECTIONS.has(response.status)) {
+        const data = await readJson(response).catch(() => ({}));
+        throw new OperationRejectedError(response.status, data.error?.code || null);
       }
       if (!response.ok) throw new ProtocolError(`The Notes API returned HTTP ${response.status}.`);
 
@@ -212,7 +233,7 @@ export class RevisionedNotesClient {
         etag: responseHeader(response, 'ETag'),
       };
     } catch (cause) {
-      if (cause instanceof RevisionConflictError) throw cause;
+      if (cause instanceof RevisionConflictError || cause instanceof OperationRejectedError) throw cause;
       throw new AmbiguousMutationError(mutation, { cause });
     }
   }

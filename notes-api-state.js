@@ -83,6 +83,14 @@ export function reduceApiState(state, event) {
         conflictReason: 'revision',
         currentRevision: event.currentRevision || null,
       };
+    case 'SAVE_REJECTED':
+      return {
+        ...state,
+        phase: API_PHASES.CONFLICT,
+        pendingMutation: null,
+        conflictReason: 'rejected',
+        currentRevision: null,
+      };
     case 'SAVE_AMBIGUOUS':
       return {
         ...state,
