@@ -1654,6 +1654,10 @@ document.getElementById('taskList').addEventListener('keydown', (e) => {
 });
 
 document.getElementById('taskList').addEventListener('focusout', (e) => {
+  // На notes.md уход из панели (например, за текстом для вставки в другую
+  // вкладку) не завершает правку: фокус вернётся в то же поле. Опрос сервера
+  // в это время не перерисовывает список (sidepadServerBusy).
+  if (isServerTab() && !document.hasFocus()) return;
   if (e.target.classList.contains('section-rename-input') && renamingSection !== null) {
     finishSectionRename(e.target);
     return;
