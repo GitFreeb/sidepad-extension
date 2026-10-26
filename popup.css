@@ -792,6 +792,24 @@ body {
   background: var(--hover);
 }
 
+/* «Неразобранные» на notes.md: закреплён сверху и выделен, как в web Notes Lab */
+.section-header.inbox {
+  border-color: var(--accent-dim);
+  background: linear-gradient(var(--accent-glow), var(--accent-glow)), var(--surface2);
+  cursor: pointer;
+}
+
+.section-header.inbox .section-title::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 1px;
+}
+
 .section-title {
   font-size: 10px;
   font-weight: 700;

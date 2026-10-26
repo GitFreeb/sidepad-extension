@@ -337,6 +337,23 @@ function routeIntent(intent) {
   return true;
 }
 
+// Notes Lab ограничивает текст 10 000 символов (как web-редактор), а голосовые
+// заметки из Whisper длиннее legacy-лимита 240 — иначе их нельзя дописать.
+const SERVER_TEXT_MAX = 10000;
+const SERVER_SECTION_MAX = 200;
+// Импорт Whisper ищет раздел по точному имени, поэтому, как и в web, он
+// закреплён сверху только на экране и не переименовывается/не удаляется.
+const INBOX_SECTION = 'Неразобранные';
+
+function isPinnedSection(name) {
+  return isServerTab() && name === INBOX_SECTION;
+}
+
+function pinInbox(list) {
+  if (!isServerTab() || !list.includes(INBOX_SECTION)) return list;
+  return [INBOX_SECTION, ...list.filter(s => s !== INBOX_SECTION)];
+}
+
 function sidepadServerBusy() {
   return editingId !== null || renamingSection !== null || moveMenuTaskId !== null || dragType !== null;
 }
@@ -1361,6 +1378,8 @@ function render() {
 
   const readOnly = isReadOnlyTab();
   document.getElementById('legacyMode').classList.toggle('readonly', readOnly);
+  document.getElementById('taskInput').maxLength    = isServerTab() ? SERVER_TEXT_MAX : 240;
+  document.getElementById('sectionInput').maxLength = isServerTab() ? SERVER_SECTION_MAX : 80;
   document.querySelector('.bc-path').textContent = tr(isServerTab() ? 'serverPath' : 'filePath');
   serverBackend?.renderChrome();
 
@@ -1387,8 +1406,9 @@ function render() {
   });
 
   // ordered: user-defined sections first, then any from tasks not yet in list
-  const orderedSections = [...sections];
+  let orderedSections = [...sections];
   taskMap.forEach((_, key) => { if (!orderedSections.includes(key)) orderedSections.push(key); });
+  orderedSections = pinInbox(orderedSections);
 
   let html = '';
   orderedSections.forEach(title => {
@@ -1396,16 +1416,17 @@ function render() {
     const secDone = items.filter(t => t.done).length;
     const isCollapsed = collapsedSections.has(title);
     const isRenaming  = renamingSection === title;
+    const pinned      = isPinnedSection(title);
 
-    html += `<li class="section-header${isCollapsed ? ' collapsed' : ''}" data-section="${escapeHtml(title)}" data-action="toggle-section" draggable="${isRenaming || readOnly ? 'false' : 'true'}">
+    html += `<li class="section-header${isCollapsed ? ' collapsed' : ''}${pinned ? ' inbox' : ''}" data-section="${escapeHtml(title)}" data-action="toggle-section" draggable="${isRenaming || readOnly || pinned ? 'false' : 'true'}">
       ${isRenaming
-        ? `<input class="section-rename-input" data-rename-section="${escapeHtml(title)}" value="${escapeHtml(title)}" maxlength="80" draggable="false">`
+        ? `<input class="section-rename-input" data-rename-section="${escapeHtml(title)}" value="${escapeHtml(title)}" maxlength="${isServerTab() ? SERVER_SECTION_MAX : 80}" draggable="false">`
         : `<span class="section-title">${escapeHtml(title)}</span>`}
       <div class="section-right">
         ${!isRenaming && items.length > 0 ? `<span class="section-count">${secDone}/${items.length}</span>` : ''}
         ${!isRenaming ? `<span class="section-caret">›</span>` : ''}
-        ${!isRenaming && !readOnly ? `<button class="btn-rename-section" data-action="rename-section" data-section="${escapeHtml(title)}" title="${tr('renameSectionTitle')}" draggable="false">✎</button>` : ''}
-        ${!readOnly ? `<button class="btn-delete-section" data-action="delete-section" data-section="${escapeHtml(title)}" title="${tr('deleteSectionTitle')}" draggable="false">×</button>` : ''}
+        ${!isRenaming && !readOnly && !pinned ? `<button class="btn-rename-section" data-action="rename-section" data-section="${escapeHtml(title)}" title="${tr('renameSectionTitle')}" draggable="false">✎</button>` : ''}
+        ${!readOnly && !pinned ? `<button class="btn-delete-section" data-action="delete-section" data-section="${escapeHtml(title)}" title="${tr('deleteSectionTitle')}" draggable="false">×</button>` : ''}
       </div>
     </li>`;
 
@@ -1427,7 +1448,7 @@ function render() {
           <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
           <div class="task-content">
             ${isEditing
-              ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="240" draggable="false">`
+              ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="${isServerTab() ? SERVER_TEXT_MAX : 240}" draggable="false">`
               : `<div class="task-text" data-action="edit-text">${escapeHtml(task.text)}</div>`}
             ${task.url
               ? `<a class="task-link" href="${escapeHtml(task.url)}" data-action="link" title="${escapeHtml(task.url)}" draggable="false">${escapeHtml(task.url)}</a>`
@@ -1504,6 +1525,7 @@ function finishSectionRename(input) {
 
 /* ── List interactions ── */
 function deleteSection(name) {
+  if (isPinnedSection(name)) return;
   if (routeIntent({ kind: 'section.delete', sectionName: name })) return;
   collapsedSections.delete(name);
   sections = sections.filter(s => s !== name);
@@ -1521,7 +1543,7 @@ document.getElementById('taskList').addEventListener('click', (e) => {
   }
 
   const renameSecBtn = e.target.closest('[data-action="rename-section"]');
-  if (renameSecBtn && !isReadOnlyTab()) {
+  if (renameSecBtn && !isReadOnlyTab() && !isPinnedSection(renameSecBtn.dataset.section)) {
     e.stopPropagation();
     renamingSection = renameSecBtn.dataset.section;
     render();
@@ -1669,7 +1691,7 @@ function updateSectionSelect() {
   const list = document.getElementById('sectionSelectList');
   if (!list) return;
   const fromTasks = [...new Set(tasks.map(t => t.section).filter(Boolean))];
-  const allSections = [...new Set([...sections, ...fromTasks])];
+  const allSections = pinInbox([...new Set([...sections, ...fromTasks])]);
   if (selectedSection !== null && !allSections.includes(selectedSection)) selectedSection = null;
   list.innerHTML = '';
   allSections.forEach(s => {
@@ -1842,6 +1864,8 @@ window.addEventListener('blur', () => {
       dragId   = Number(taskEl.dataset.id);
       e.dataTransfer.effectAllowed = 'move';
       setTimeout(() => taskEl.classList.add('dragging'), 0);
+    } else if (secEl && isPinnedSection(secEl.dataset.section)) {
+      e.preventDefault();
     } else if (secEl) {
       dragType = 'section';
       dragId   = secEl.dataset.section;
@@ -1866,7 +1890,7 @@ window.addEventListener('blur', () => {
         secEl.classList.add('drag-over-section');
       }
     } else if (dragType === 'section') {
-      if (secEl && secEl.dataset.section !== dragId) {
+      if (secEl && secEl.dataset.section !== dragId && !isPinnedSection(secEl.dataset.section)) {
         const r = secEl.getBoundingClientRect();
         secEl.classList.add(e.clientY < r.top + r.height / 2 ? 'drag-before' : 'drag-after');
       }
@@ -1886,7 +1910,7 @@ window.addEventListener('blur', () => {
         moveTaskToSection(dragId, secEl.dataset.section);
       }
     } else if (dragType === 'section') {
-      if (secEl && secEl.dataset.section !== dragId) {
+      if (secEl && secEl.dataset.section !== dragId && !isPinnedSection(secEl.dataset.section)) {
         const r = secEl.getBoundingClientRect();
         moveSection(dragId, secEl.dataset.section, e.clientY < r.top + r.height / 2 ? 'before' : 'after');
       }

@@ -306,6 +306,51 @@ test('idle polling revalidates with If-None-Match and picks up remote changes', 
   await page.waitFor(`__t.task('remote arrival') !== undefined`, { timeout: 5000 });
 });
 
+const LONG_VOICE = 'Синтетическая голосовая заметка '.repeat(12).trim();
+
+test('the Whisper inbox is pinned on top, marked, and protected from rename, delete and section drag', { skip }, async () => {
+  await settle();
+  fake.sections.push({ name: 'Неразобранные', tasks: [{ text: LONG_VOICE, done: false, url: null }, { text: 'short voice', done: false, url: null }] });
+  await page.waitFor(`__t.section('Неразобранные') !== undefined`, { timeout: 6000 });
+  assert.equal(fake.markdownModel().at(-1)[0], 'Неразобранные', 'server order is untouched');
+  assert.equal((await model())[0].name, 'Неразобранные');
+  assert.equal(await page.evaluate(`__t.section('Неразобранные').classList.contains('inbox')`), true);
+  assert.equal(await page.evaluate(`__t.section('Неразобранные').getAttribute('draggable')`), 'false');
+  assert.equal(await page.evaluate(`__t.section('Неразобранные').querySelector('.btn-rename-section, .btn-delete-section')`), null);
+  assert.equal(await page.evaluate(`document.querySelector('#sectionSelectList .csel-item').dataset.value`), 'Неразобранные');
+
+  const count = fake.mutations().length;
+  await page.evaluate(`__t.drag(__t.section('Work'), __t.section('Неразобранные'), 'before')`);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(fake.mutations().length, count, 'dropping a section onto the pinned inbox does nothing');
+
+  const names = (await model()).map((section) => section.name);
+  const [first, second] = names.slice(1, 3);
+  await page.evaluate(`__t.drag(__t.section(${JSON.stringify(second)}), __t.section(${JSON.stringify(first)}), 'before')`);
+  await page.waitFor(`__t.model()[1].name === ${JSON.stringify(second)}`);
+  assert.equal((await model())[0].name, 'Неразобранные');
+  assert.equal(fake.markdownModel().at(-1)[0], 'Неразобранные');
+
+  await page.evaluate(`__t.drag(__t.task('report') || __t.task('from another client'), __t.task('short voice'), 'after')`);
+  await page.waitFor(`__t.model()[0].tasks.length === 3`);
+});
+
+test('long voice tasks can be edited by typing beyond the old 240 character limit', { skip }, async () => {
+  await settle();
+  assert.ok(LONG_VOICE.length > 240);
+  await page.evaluate(`__t.task(${JSON.stringify(LONG_VOICE)}).querySelector('.task-text').click()`);
+  await page.evaluate(`(() => { const input = document.querySelector('.task-edit-input'); input.focus(); input.setSelectionRange(input.value.length, input.value.length); })()`);
+  await page.send('Input.insertText', { text: ' дополнено' });
+  await page.evaluate(`__t.key('.task-edit-input', 'Enter')`);
+  await page.waitFor(`__t.task(${JSON.stringify(`${LONG_VOICE} дополнено`)}) !== undefined`);
+  assert.equal(op().task.text, `${LONG_VOICE} дополнено`);
+
+  await page.evaluate(`document.getElementById('taskInput').focus()`);
+  await page.send('Input.insertText', { text: `${LONG_VOICE} новая` });
+  assert.equal(await page.evaluate(`document.getElementById('taskInput').value.length`), LONG_VOICE.length + 6);
+  await page.evaluate(`document.getElementById('taskInput').value = ''`);
+});
+
 test('✕ clear on notes.md only closes the local tab after confirmation and sends no mutation', { skip }, async () => {
   await settle();
   const count = fake.mutations().length;
