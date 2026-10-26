@@ -347,33 +347,30 @@ Legacy-режим не требует регистрации и отправля
 
 ## Экспериментальный режим Notes API
 
-Переключатель **Notes API · dev** открывает изолированный клиент Notes Lab с единственным writer. По умолчанию он выключен: Sidepad не запрашивает optional permission `https://notes.lab/*`, не создаёт API transport и не отправляет Notes API запросы. Legacy-вкладки, `FileSystemFileHandle`, import/export и `↓auto` не меняются.
+Переключатель **Notes API** меняет только место хранения: появляется обычная вкладка `notes.md`, которая хранится в Notes Lab, а не в файле. Интерфейс тот же: чекбоксы, перетаскивание, правка, секции, перенос через `→`, импорт и экспорт. Порядок задач задаёт сервер: новая задача встаёт в начало секции, выполненная уходит в конец, снятая отметка возвращает задачу в начало. Файловые вкладки и `↓auto` продолжают работать как раньше.
 
-Включение — явный пользовательский жест, который запрашивает доступ только к `https://notes.lab/*`. Сначала выключите `↓auto` на всех legacy-вкладках: при активном файловом autosave режим не включится.
+По умолчанию режим выключен. В этом состоянии Sidepad не запрашивает optional permission `https://notes.lab/*` и не отправляет Notes API запросы.
 
-### Pairing и credential
+### Подключение
 
-1. Войдите на `https://notes.lab` и создайте одноразовый pairing через authenticated client-management flow.
-2. Вставьте `pairing_id` и одноразовый `code` в Sidepad и задайте label клиента.
-3. Sidepad обменивает их напрямую только с exact `https://notes.lab`. Старый Bearer при exchange не отправляется, redirects запрещены.
-4. Выданный Bearer credential и минимальные metadata сохраняются только в `chrome.storage.local`. Secret не показывается в DOM и не попадает в browser sync, Markdown/file export, logs или draft/session storage.
+1. Включите **Notes API**. Sidepad запросит доступ к `https://notes.lab/*` и откроет `https://notes.lab/#sidepad-connect=<id расширения>`.
+2. Войдите в Notes Lab и подтвердите подключение. Страница сама передаёт одноразовый код расширению через `externally_connectable`. Service worker Sidepad обменивает его напрямую с `https://notes.lab` и сохраняет ключ только в `chrome.storage.local`.
+3. Попытка подключения живёт не дольше 10 минут. Сообщения принимаются только от `https://notes.lab`, только при активной попытке и только строгой схемы.
 
-Credential добавляется только к Notes Lab content requests `/api/v1/*`. Ответ `401` или `403` удаляет отклонённый local secret, блокирует клиент и требует явного re-pair; запросы и mutations автоматически не повторяются. Confirmed snapshot и draft сохраняются. Если уже есть ambiguous mutation, re-pair сохраняет её для ручного retry с тем же `operation_id` и не запускает replay или refresh.
+Ручной ввод `pairing_id` и кода остаётся в настройках (⚙) в разделе **восстановление**. Ключ не показывается в DOM и не попадает в browser sync, `storage.session`, экспорт и логи. **Забыть ключ** удаляет только локальную копию, отзыв делается в Notes Lab.
 
-**Disable API mode** очищает snapshot/draft session и снимает optional host permission, но оставляет local credential для следующего явного включения. **Forget local credential / re-pair** удаляет только локальную копию. Это не server revoke: отзыв выполняется через authenticated Notes Lab web flow.
+### Legacy-вкладка
 
-### Безопасность ревизий
+При первом подключении Sidepad предлагает выбрать вкладку со старым списком (по умолчанию `dop.md`, если она есть). Пока включён Notes API, эта вкладка только для чтения, с кнопками «перейти в notes.md» и «закрыть вкладку». Файл не меняется. Выбор снимается в настройках, а при выключении Notes API всё возвращается к прежнему поведению.
 
-- conditional `GET /api/v1/document` с `ETag` / `304`;
-- семантические операции через `/api/v1/document/operations`, никогда не полный Markdown;
-- `expected_revision` и стабильный `operation_id` для каждой mutation;
-- явные locked states для `401` / `403` и conflict для `409`;
-- последний confirmed snapshot только для offline-чтения, без offline writes, очереди или automatic replay;
-- ручной retry ambiguous mutation с исходным `operation_id`.
+### Синхронизация и безопасность ревизий
 
-UI намеренно содержит только небольшую структурированную форму **create task**. При stale revision draft сохраняется и требует refresh плюс нового явного submit. Legacy-вкладки и file handles не мигрируются и не удаляются.
-
----
+- `notes.md` читается при открытии, при фокусе и раз в 2 секунды по `ETag`/`304`, только пока панель видна. Офлайн, `429` и `503` включают ограниченный backoff.
+- Каждое действие — одна semantic operation с `expected_revision` и стабильным `operation_id`. Полный Markdown никогда не отправляется.
+- Refs действуют только в своей ревизии и заново разрешаются после каждого ответа.
+- Конфликт `409` перечитывает документ без повтора операции. Потерянный ответ требует явного «повторить» с тем же `operation_id`.
+- Офлайн показывает последний подтверждённый снимок только для чтения: без очереди и без автоматического повтора.
+- **✕ очистить** на `notes.md` только закрывает локальную вкладку, задачи остаются на сервере. Вернуть её можно кнопкой «открыть notes.md».
 
 ## Перетаскивание
 

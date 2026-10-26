@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sidepad",
-  "version": "1.6.5",
+  "version": "1.7.0",
   "description": "Side panel task manager with sections, tabs, Markdown import/export, built-in example list, dark/light theme and RU/EN language switch",
   "icons": {
     "16": "icons/icon16.png",
@@ -22,8 +22,12 @@
     "default_path": "popup.html"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "permissions": ["storage", "sidePanel", "downloads"],
-  "optional_host_permissions": ["https://notes.lab/*"]
+  "optional_host_permissions": ["https://notes.lab/*"],
+  "externally_connectable": {
+    "matches": ["https://notes.lab/*"]
+  }
 }

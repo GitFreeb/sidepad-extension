@@ -352,33 +352,30 @@ Connecting the empty `default` tab to an existing file automatically renames it 
 
 ## Experimental Notes API Mode
 
-The **Notes API · dev** switch exposes an isolated client for the single-writer Notes Lab architecture. It is off by default. While it is off, Sidepad does not request the optional `https://notes.lab/*` host permission, create an API transport, or send Notes API requests. Existing tabs, `FileSystemFileHandle` records, import/export and `↓auto` behavior are unchanged.
+The **Notes API** switch changes only where tasks are stored: a regular `notes.md` tab appears and lives in Notes Lab instead of a file. The interface is the same — checkboxes, drag and drop, inline edit, sections, `→` move, import and export. The server owns task order: a new task goes to the top of its section, a finished task moves to the end, a reopened task returns to the top. File tabs and `↓auto` keep working as before.
 
-Enabling the switch is an explicit user gesture that requests access only to `https://notes.lab/*`. Turn off `↓auto` on all legacy tabs first; the switch refuses activation while any tab has file autosave enabled, including after the panel reopens.
+The mode is off by default. While it is off, Sidepad does not request the optional `https://notes.lab/*` permission and sends no Notes API requests.
 
-### Pairing and credentials
+### Connecting
 
-1. Sign in at `https://notes.lab` and create a one-time pairing through its authenticated client-management flow.
-2. Paste the `pairing_id` and one-time `code` into Sidepad and choose a client label.
-3. Sidepad exchanges them directly with exact `https://notes.lab`. The exchange never sends an old Bearer credential and redirects are rejected.
-4. The issued Bearer credential and minimal metadata are saved only in `chrome.storage.local`. The secret is never shown in the DOM and is not included in browser sync, Markdown/file export, logs or draft/session storage.
+1. Turn on **Notes API**. Sidepad requests access to `https://notes.lab/*` and opens `https://notes.lab/#sidepad-connect=<extension id>`.
+2. Sign in to Notes Lab and confirm. The page hands a one-time code to the extension through `externally_connectable`; the Sidepad service worker exchanges it directly with `https://notes.lab` and stores the key only in `chrome.storage.local`.
+3. A connection attempt lives at most 10 minutes. Messages are accepted only from `https://notes.lab`, only while an attempt is pending, and only with the exact schema.
 
-The credential is attached only to Notes Lab `/api/v1/*` content requests. A `401` or `403` removes the rejected local secret, locks the client and requires explicit re-pairing; it does not retry a request or replay a mutation. The confirmed snapshot and draft remain available. If an uncertain mutation already exists, re-pairing preserves it for the existing manual same-`operation_id` retry and does not replay or refresh automatically.
+Manual `pairing_id` + code entry stays in settings (⚙) under **recovery**. The key is never shown in the DOM and never reaches browser sync, `storage.session`, exports or logs. **Forget the key** removes only the local copy; revoke it in Notes Lab.
 
-**Disable API mode** clears its snapshot/draft session and removes the optional host permission, but retains the local credential for the next explicit enable. **Forget local credential / re-pair** deletes the local copy only. It does not revoke the server credential; revoke that credential through the authenticated Notes Lab web flow.
+### Legacy tab
 
-### Revision safety
+On the first connection Sidepad asks which tab holds the old list (`dop.md` is suggested when present). While Notes API is on, that tab is read-only with “go to notes.md” and “close tab” actions; the file is never changed. The choice can be cleared in settings, and turning Notes API off restores the previous behavior completely.
 
-- conditional `GET /api/v1/document` with `ETag` / `304`;
-- semantic operations at `/api/v1/document/operations`, never a full Markdown document;
-- `expected_revision` and a stable `operation_id` on every mutation;
-- explicit locked states for `401` / `403` and conflict state for `409`;
-- a last confirmed snapshot for offline read-only display, with no offline writes, queue or automatic replay;
-- manual retry of an uncertain mutation with the original `operation_id`.
+### Sync and revision safety
 
-The UI intentionally offers only a small structured **create task** form. On a stale revision it preserves the local draft and requires refresh plus a new explicit submit. If a mutation response is lost, retry is manual and preserves the exact operation ID. Legacy tabs and file handles are not migrated or deleted. The existing legacy update checker may still fetch the public Sidepad version manifest from GitHub, independently of Notes API mode.
-
----
+- `notes.md` is read on open, on focus and every 2 seconds via `ETag`/`304`, only while the panel is visible. Offline, `429` and `503` use bounded backoff.
+- Every action is one semantic operation with `expected_revision` and a stable `operation_id`; a full Markdown document is never sent.
+- Refs are valid only in their revision and are resolved again after every response.
+- A `409` conflict rereads the document without replaying the operation. A lost response requires an explicit “retry” with the same `operation_id`.
+- Offline shows the last confirmed snapshot read-only — no queue, no automatic replay.
+- **✕ clear** on `notes.md` only closes the local tab; the tasks stay on the server. Bring it back with “open notes.md”.
 
 ## Drag and Drop
 

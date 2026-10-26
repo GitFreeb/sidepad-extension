@@ -5,6 +5,8 @@ import {
   AmbiguousMutationError,
   AuthRequiredError,
   OfflineError,
+  OperationRejectedError,
+  RateLimitedError,
   RevisionConflictError,
   RevisionedNotesClient,
   createFetchTransport,
@@ -167,6 +169,45 @@ test('a server error or malformed success after mutation is ambiguous', async ()
       (error) => error instanceof AmbiguousMutationError && error.mutation.operationId === 'op-uncertain',
     );
   }
+});
+
+test('GET 429 backs off as a rate-limited offline condition', async () => {
+  const client = new RevisionedNotesClient({ transport: { request: async () => jsonResponse({ error: { code: 'rate_limited' } }, 429) } });
+  await assert.rejects(client.load(), (error) => error instanceof RateLimitedError && error instanceof OfflineError);
+});
+
+test('a definite server rejection is not ambiguous and is never retried', async () => {
+  for (const [status, body] of [
+    [400, { error: { code: 'validation_error' } }],
+    [404, { error: { code: 'not_found' } }],
+    [409, { error: { code: 'operation_id_reused' } }],
+    [409, { error: { code: 'confirmation_required' } }],
+    [415, { error: { code: 'unsupported_media_type' } }],
+    [429, { error: { code: 'rate_limited' } }],
+  ]) {
+    let attempts = 0;
+    const client = new RevisionedNotesClient({
+      operationIdFactory: () => 'op-rejected',
+      transport: { request: async () => { attempts += 1; return jsonResponse(body, status); } },
+    });
+    await assert.rejects(
+      client.mutate({ expectedRevision: 'rev-1', operation: { type: 'task.delete', task_ref: 'task-1' } }),
+      (error) => error instanceof OperationRejectedError && error.status === status && !(error instanceof AmbiguousMutationError),
+      `HTTP ${status}`,
+    );
+    assert.equal(attempts, 1);
+  }
+});
+
+test('an operation still in progress on the server stays ambiguous for manual retry', async () => {
+  const client = new RevisionedNotesClient({
+    operationIdFactory: () => 'op-lease',
+    transport: { request: async () => jsonResponse({ error: { code: 'operation_in_progress' } }, 409) },
+  });
+  await assert.rejects(
+    client.mutate({ expectedRevision: 'rev-1', operation: { type: 'task.delete', task_ref: 'task-1' } }),
+    (error) => error instanceof AmbiguousMutationError && error.mutation.operationId === 'op-lease',
+  );
 });
 
 test('mutations send semantic operations, not a full Markdown document', async () => {

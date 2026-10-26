@@ -1,55 +1,50 @@
+// Контроллер Notes API для единого интерфейса Sidepad. Собственного UI здесь
+// нет: вкладка notes.md рисуется тем же popup.js, а этот модуль переводит её
+// действия в semantic operations, применяет ответы сервера, опрашивает
+// документ и ведёт подключение. Строки берутся из tr() в popup.js.
 import { createFetchTransport, RevisionedNotesClient } from './notes-api-client.js';
 import { NotesApiMode } from './notes-api-mode.js';
-import { NOTES_ORIGIN, NotesApiAuth, PairingError } from './notes-api-auth.js';
+import { API_CREDENTIAL_STORAGE_KEY, NOTES_ORIGIN, NotesApiAuth } from './notes-api-auth.js';
+import { SERVER_TAB_ID, SERVER_TAB_TITLE, StaleIntentError, captureIntent, documentToTab, planOperation } from './notes-api-tab.js';
+import { VisiblePoller } from './notes-api-sync.js';
+import {
+  CONNECT_PENDING_STORAGE_KEY,
+  activeConnectAttempt,
+  beginConnectAttempt,
+  cancelConnectAttempt,
+  connectUrl,
+} from './notes-api-connect.js';
 
 const ORIGIN_PERMISSION = { origins: [`${NOTES_ORIGIN}/*`] };
+const LEGACY_CHOICE_KEY = 'notesApiLegacyTabV1';
+const SERVER_TAB_CLOSED_KEY = 'notesApiTabClosedV1';
+const SERVER_TAB = { id: SERVER_TAB_ID, title: SERVER_TAB_TITLE, storage: 'notes-api', autoSave: false };
 
-function storageGet(keys) {
+function chromeCall(fn) {
   return new Promise((resolve, reject) => {
-    chrome.storage.local.get(keys, (value) => {
+    fn((value) => {
       if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
       else resolve(value);
     });
   });
 }
 
-function storageSet(value) {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.set(value, () => {
-      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-      else resolve();
-    });
-  });
-}
+const localStore = {
+  get: (keys) => chromeCall((done) => chrome.storage.local.get(keys, done)),
+  set: (value) => chromeCall((done) => chrome.storage.local.set(value, done)),
+  remove: (keys) => chromeCall((done) => chrome.storage.local.remove(keys, done)),
+};
 
-function storageRemove(keys) {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.remove(keys, () => {
-      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-      else resolve();
-    });
-  });
-}
+const permissions = {
+  contains: (permission) => chromeCall((done) => chrome.permissions.contains(permission, done)).then(Boolean),
+  request: (permission) => chromeCall((done) => chrome.permissions.request(permission, done)).then(Boolean),
+  remove: (permission) => chromeCall((done) => chrome.permissions.remove(permission, done)).then(Boolean),
+};
 
-function permissionCall(method, permission) {
-  return new Promise((resolve, reject) => {
-    chrome.permissions[method](permission, (result) => {
-      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-      else resolve(Boolean(result));
-    });
-  });
-}
-
-const localStorage = { get: storageGet, set: storageSet, remove: storageRemove };
-const auth = new NotesApiAuth({ storage: localStorage });
-
+const auth = new NotesApiAuth({ storage: localStore });
 const mode = new NotesApiMode({
-  storage: localStorage,
-  permissions: {
-    contains: (permission) => permissionCall('contains', permission),
-    request: (permission) => permissionCall('request', permission),
-    remove: (permission) => permissionCall('remove', permission),
-  },
+  storage: localStore,
+  permissions,
   originPermission: ORIGIN_PERMISSION,
   auth,
   clientFactory: () => new RevisionedNotesClient({
@@ -60,303 +55,489 @@ const mode = new NotesApiMode({
   }),
 });
 
-const elements = {
-  toggle: document.getElementById('apiModeToggle'),
-  hint: document.getElementById('apiModeHint'),
-  legacy: document.getElementById('legacyMode'),
-  api: document.getElementById('apiMode'),
-  status: document.getElementById('apiStatus'),
-  meta: document.getElementById('apiMeta'),
-  authPanel: document.getElementById('apiAuthPanel'),
-  authState: document.getElementById('apiAuthState'),
-  authHelp: document.getElementById('apiAuthHelp'),
-  pairingForm: document.getElementById('apiPairingForm'),
-  pairingId: document.getElementById('apiPairingIdInput'),
-  pairingCode: document.getElementById('apiPairingCodeInput'),
-  pairingLabel: document.getElementById('apiPairingLabelInput'),
-  pair: document.getElementById('apiPairBtn'),
-  authCurrent: document.getElementById('apiAuthCurrent'),
-  authMeta: document.getElementById('apiAuthMeta'),
-  authResetRow: document.querySelector('.api-auth-reset-row'),
-  forgetAuth: document.getElementById('apiForgetAuthBtn'),
-  notice: document.getElementById('apiNotice'),
-  refresh: document.getElementById('apiRefreshBtn'),
-  retry: document.getElementById('apiRetryBtn'),
-  copyDraft: document.getElementById('apiCopyDraftBtn'),
-  reset: document.getElementById('apiResetBtn'),
-  form: document.getElementById('apiTaskForm'),
-  section: document.getElementById('apiSectionSelect'),
-  task: document.getElementById('apiTaskInput'),
-  url: document.getElementById('apiUrlInput'),
-  submit: document.getElementById('apiSubmitBtn'),
-  document: document.getElementById('apiDocument'),
+const $ = (id) => document.getElementById(id);
+const el = {
+  toggle: $('apiModeToggle'),
+  hint: $('apiModeHint'),
+  openTab: $('openServerTabBtn'),
+  settingsBtn: $('apiSettingsBtn'),
+  settings: $('apiSettings'),
+  connLabel: $('apiConnLabel'),
+  connState: $('apiConnState'),
+  connect: $('apiConnectBtn'),
+  forget: $('apiForgetBtn'),
+  forgetHint: $('apiForgetHint'),
+  legacyLabel: $('apiLegacyLabel'),
+  legacyPrompt: $('apiLegacyPrompt'),
+  legacySelect: $('apiLegacySelect'),
+  legacySave: $('apiLegacySaveBtn'),
+  recoverySummary: $('apiRecoverySummary'),
+  recoveryHint: $('apiRecoveryHint'),
+  pairingForm: $('apiPairingForm'),
+  pairingIdLabel: $('apiPairingIdLabel'),
+  pairingCodeLabel: $('apiPairingCodeLabel'),
+  pairingLabelLabel: $('apiPairingLabelLabel'),
+  pairingId: $('apiPairingIdInput'),
+  pairingCode: $('apiPairingCodeInput'),
+  pairingLabel: $('apiPairingLabelInput'),
+  pair: $('apiPairBtn'),
+  sync: $('syncState'),
+  notice: $('serverNotice'),
+  noticeText: $('serverNoticeText'),
+  noticeActions: $('serverNoticeActions'),
 };
 
-function sectionsFrom(snapshot) {
-  return Array.isArray(snapshot?.document?.sections) ? snapshot.document.sections : [];
+const ui = {
+  legacyChoice: undefined,
+  tabClosed: false,
+  pending: false,
+  notice: null,
+  appliedRevision: null,
+  deferredApply: false,
+  queue: [],
+  pumping: false,
+};
+
+/* ── Backend registered in popup.js ── */
+
+function authPhase() {
+  return auth.snapshot().phase;
 }
 
-function renderDocument(snapshot) {
-  elements.document.replaceChildren();
-  const sections = sectionsFrom(snapshot);
-  if (!snapshot || sections.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'api-empty';
-    empty.textContent = snapshot ? 'The confirmed document has no sections.' : 'No confirmed API snapshot.';
-    elements.document.append(empty);
+const backend = {
+  legacyTabId: null,
+  canWrite() {
+    return authPhase() === 'current' && (mode.state.phase === 'current' || mode.state.phase === 'saving');
+  },
+  dispatch(intent) {
+    const document = mode.state.confirmed?.document;
+    if (!document || !backend.canWrite()) return;
+    let captured;
+    try {
+      captured = captureIntent(document, intent);
+    } catch (error) {
+      if (!(error instanceof StaleIntentError)) throw error;
+      notify('noticeStale');
+      return;
+    }
+    ui.queue.push(captured);
+    pump().catch(showLocalError);
+  },
+  notify,
+  renderChrome,
+  onServerTabClosed() {
+    ui.tabClosed = true;
+    localStore.set({ [SERVER_TAB_CLOSED_KEY]: true }).catch(() => {});
+    renderModebar();
+  },
+  onLegacyTabClosed() {
+    setLegacyChoice(null);
+  },
+};
+
+const NOTICE_MS = 6000;
+let noticeTimer = null;
+
+function notify(key) {
+  ui.notice = key;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { ui.notice = null; renderChrome(); }, NOTICE_MS);
+  renderChrome();
+}
+
+/* ── Mutations: one semantic operation at a time ── */
+
+async function pump() {
+  if (ui.pumping) return;
+  ui.pumping = true;
+  try {
+    while (ui.queue.length) {
+      if (!(authPhase() === 'current' && mode.state.phase === 'current')) {
+        ui.queue = [];
+        break;
+      }
+      const intent = ui.queue.shift();
+      let operation;
+      try {
+        // Refs действуют только в своей ревизии: разрешаем намерение против
+        // последнего подтверждённого документа, а не того, что был при клике.
+        operation = planOperation(mode.state.confirmed.document, intent);
+      } catch (error) {
+        if (!(error instanceof StaleIntentError)) throw error;
+        ui.queue = [];
+        notify('noticeStale');
+        await mode.refresh({ quiet: true });
+        break;
+      }
+      if (!operation) continue;
+      await mode.submit(operation);
+      if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
+        ui.queue = [];
+        notify(mode.state.conflictReason === 'rejected' ? 'noticeRejected' : 'noticeConflict');
+        // Конфликт: перечитать документ без повтора операции.
+        await mode.refresh({ quiet: true });
+        break;
+      }
+      if (mode.state.phase !== 'current') {
+        ui.queue = [];
+        break;
+      }
+    }
+  } finally {
+    ui.pumping = false;
+    renderChrome();
+  }
+}
+
+/* ── Snapshot → popup.js ── */
+
+function applySnapshot({ force = false } = {}) {
+  const snapshot = mode.state.confirmed;
+  if (!mode.enabled || !snapshot?.document) return;
+  if (!force && snapshot.revision === ui.appliedRevision) return;
+  if (sidepadServerBusy()) {
+    ui.deferredApply = true;
     return;
   }
+  const remote = ui.appliedRevision !== null && !ui.pumping;
+  ui.appliedRevision = snapshot.revision;
+  ui.deferredApply = false;
+  sidepadApplyServerTab(documentToTab(snapshot.document), { remote });
+}
 
-  sections.forEach((section) => {
-    const heading = document.createElement('div');
-    heading.className = 'api-section-title';
-    heading.textContent = section.name || 'Untitled section';
-    elements.document.append(heading);
+let lastWritable = null;
 
-    const tasks = Array.isArray(section.tasks) ? section.tasks : [];
-    tasks.forEach((task) => {
-      const row = document.createElement('div');
-      row.className = `api-task${task.done ? ' done' : ''}`;
-      const mark = document.createElement('span');
-      mark.className = 'api-task-mark';
-      mark.textContent = task.done ? '☑' : '☐';
-      const text = document.createElement('span');
-      text.textContent = task.text || '';
-      row.append(mark, text);
-      elements.document.append(row);
+function onModeChange() {
+  if (mode.enabled) applySnapshot();
+  const writable = backend.canWrite();
+  if (writable !== lastWritable) {
+    lastWritable = writable;
+    // Read-only меняет сам список (чекбоксы, drag, кнопки), а не только индикатор.
+    if (typeof sidepadRender === 'function' && sidepadServerTabId()) sidepadRender();
+  }
+  renderChrome();
+}
+
+/* ── Polling ── */
+
+const poller = new VisiblePoller({
+  isVisible: () => document.visibilityState === 'visible',
+  async tick() {
+    if (ui.deferredApply) applySnapshot();
+    if (ui.pending) {
+      await refreshPending();
+      if (!ui.pending) renderChrome();
+    }
+    if (!mode.enabled || authPhase() !== 'current' || ui.pumping || sidepadServerBusy()) return 'ok';
+    await mode.refresh({ quiet: true });
+    return mode.state.phase === 'offline-read-only' ? 'backoff' : 'ok';
+  },
+});
+
+document.addEventListener('visibilitychange', () => poller.wake());
+window.addEventListener('focus', () => poller.wake());
+
+/* ── Chrome: indicator, notice, modebar, settings ── */
+
+function syncKind() {
+  if (ui.pending && authPhase() !== 'current') return 'Pending';
+  if (authPhase() !== 'current') return 'Auth';
+  const { phase, conflictReason } = mode.state;
+  if (phase === 'saving' || ui.pumping) return 'Saving';
+  if (phase === 'offline-read-only') return 'Offline';
+  if (phase === 'conflict') return conflictReason === 'ambiguous' ? 'Retry' : 'Conflict';
+  if (phase === 'loading') return 'Loading';
+  return 'Current';
+}
+
+function noticeFor(tabIsServer) {
+  const actions = [];
+  if (!tabIsServer) {
+    if (!isLegacyLockedTab()) return null;
+    actions.push(['actionGoServer', () => sidepadSwitchTab(sidepadServerTabId() || openServerTab())]);
+    actions.push(['actionCloseTab', () => sidepadCloseTab(backend.legacyTabId)]);
+    return { key: 'noticeLegacy', actions };
+  }
+  const kind = syncKind();
+  if (kind === 'Pending') return { key: 'noticePending', actions: [['actionConnect', () => startConnect()]] };
+  if (kind === 'Auth') {
+    const key = auth.snapshot().errorReason === 'credential-rejected' ? 'noticeRejectedAuth' : 'noticeAuth';
+    return { key, actions: [['actionConnect', () => startConnect()]] };
+  }
+  if (kind === 'Retry') return { key: 'noticeAmbiguous', actions: [['actionRetry', () => retryAmbiguous()]] };
+  if (kind === 'Offline') return { key: 'noticeOffline', actions: [] };
+  if (ui.notice) return { key: ui.notice, actions: [] };
+  return null;
+}
+
+function renderNotice() {
+  const notice = mode.enabled ? noticeFor(isServerTab()) : null;
+  el.notice.hidden = !notice;
+  if (!notice) {
+    el.noticeText.textContent = '';
+    el.noticeActions.replaceChildren();
+    return;
+  }
+  el.notice.dataset.kind = notice.key;
+  el.noticeText.textContent = tr(notice.key);
+  el.noticeActions.replaceChildren(...notice.actions.map(([key, handler]) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'server-notice-btn';
+    button.textContent = tr(key);
+    button.addEventListener('click', () => {
+      try {
+        const result = handler();
+        if (result?.catch) result.catch(showLocalError);
+      } catch {
+        showLocalError();
+      }
     });
-  });
+    return button;
+  }));
 }
 
-function renderSectionOptions(snapshot, selectedName) {
-  const sections = sectionsFrom(snapshot);
-  const previousName = selectedName || elements.section.value;
-  elements.section.replaceChildren();
-  if (selectedName && !sections.some((section) => section.name === selectedName)) {
-    const missing = document.createElement('option');
-    missing.value = '';
-    missing.textContent = 'Previous section is unavailable — choose another';
-    elements.section.append(missing);
-  }
-  sections.forEach((section) => {
-    const option = document.createElement('option');
-    option.value = section.name;
-    option.textContent = section.name;
-    elements.section.append(option);
-  });
-  if (sections.some((section) => section.name === previousName)) elements.section.value = previousName;
-  else if (selectedName) elements.section.value = '';
+function renderSync() {
+  const show = mode.enabled && isServerTab();
+  el.sync.hidden = !show;
+  if (!show) return;
+  const kind = syncKind();
+  el.sync.dataset.kind = kind.toLowerCase();
+  el.sync.textContent = tr(`sync${kind}`);
+  el.sync.title = tr(`sync${kind}Title`);
 }
 
-function noticeFor(state, authState) {
-  if (authState?.phase === 'pairing') {
-    return 'Exchanging the one-time pairing directly with Notes Lab. The code is not stored.';
-  }
-  if (authState?.phase !== 'current' && state.conflictReason === 'ambiguous') {
-    return 'Pairing is required. The uncertain operation and draft are preserved and will not replay automatically; retry remains manual.';
-  }
-  if (authState?.phase === 'auth-required') {
-    return 'Locked · the saved credential was rejected and removed locally. Re-pair explicitly; no request or mutation is retried.';
-  }
-  if (authState?.phase === 'missing') {
-    return 'Credential missing · create a one-time pairing in the authenticated Notes Lab flow, then connect here.';
-  }
-  if (state.phase === 'loading') return 'Loading the current revision. Editing stays locked until it is confirmed.';
-  if (state.phase === 'saving') return 'Saving one semantic operation with the confirmed revision.';
-  if (state.phase === 'offline-read-only') return 'Offline · read-only. Showing the last confirmed snapshot; no operation is queued.';
-  if (state.phase === 'auth-required') return 'Locked · authentication required. No task payload was logged or retried.';
-  if (state.phase === 'conflict' && state.conflictReason === 'ambiguous') {
-    return 'The save response was lost. The draft is preserved. Retry manually with the same operation ID before refreshing.';
-  }
-  if (state.phase === 'conflict') {
-    return 'Stale revision. The draft is preserved; refresh the document, review it, then submit the intent again.';
-  }
-  return 'Current · writes use semantic operations only. No full Markdown document is sent.';
+function renderModebar() {
+  el.toggle.checked = mode.enabled;
+  el.settingsBtn.hidden = !mode.enabled;
+  el.settingsBtn.title = tr('settingsTitle');
+  el.openTab.hidden = !mode.enabled || Boolean(sidepadServerTabId());
+  el.openTab.textContent = tr('openServerTab');
+  if (mode.enabled) el.hint.hidden = true;
 }
 
-function updateFormFromDraft(draft) {
-  if (!draft) return;
-  if (document.activeElement !== elements.task) elements.task.value = draft.text || '';
-  if (document.activeElement !== elements.url) elements.url.value = draft.url || '';
-  if (draft.sectionName) elements.section.value = draft.sectionName;
-}
-
-function render({ enabled, state, auth: authState }) {
-  elements.toggle.checked = enabled;
-  if (enabled) {
-    elements.hint.hidden = true;
-  } else if (authState?.phase === 'current') {
-    elements.hint.textContent = 'API off · local credential retained';
-    elements.hint.hidden = false;
+function renderSettings() {
+  if (!mode.enabled) {
+    el.settings.hidden = true;
+    return;
   }
-  elements.legacy.hidden = enabled;
-  elements.api.hidden = !enabled;
-  if (!enabled) return;
-
-  const authPhase = authState?.phase || 'missing';
-  const displayPhase = authPhase === 'current'
-    ? state.phase
-    : authPhase === 'missing' ? 'credential-missing' : authPhase;
-  elements.status.textContent = displayPhase;
-  elements.status.dataset.phase = displayPhase;
-  elements.notice.textContent = noticeFor(state, authState);
-  elements.authPanel.dataset.phase = authPhase;
-  elements.authState.textContent = authPhase === 'current'
-    ? 'current'
-    : authPhase === 'pairing' ? 'pairing…' : authPhase === 'auth-required' ? 'auth required' : 'credential missing';
-  const pairing = authPhase === 'pairing';
-  const current = authPhase === 'current';
-  elements.authHelp.hidden = current;
-  elements.pairingForm.hidden = current;
-  [elements.pairingId, elements.pairingCode, elements.pairingLabel, elements.pair].forEach((element) => {
-    element.disabled = pairing;
-  });
-  elements.authCurrent.hidden = !current;
-  elements.authResetRow.hidden = authPhase === 'missing' || pairing;
-  const credentialId = authState?.credentialId;
-  const scopes = Array.isArray(authState?.scopes) ? authState.scopes.join(' · ') : '';
-  elements.authMeta.textContent = credentialId
-    ? `client ${credentialId.slice(0, 8)}…${scopes ? ` · ${scopes}` : ''}`
-    : 'Paired locally';
-  const revision = state.confirmed?.revision;
-  const fetchedAt = state.confirmed?.fetchedAt;
-  elements.meta.textContent = revision
-    ? `rev ${revision.slice(0, 12)} · ${fetchedAt || 'time unknown'}`
-    : 'No confirmed snapshot';
-
-  renderSectionOptions(state.confirmed, state.draft?.sectionName);
-  updateFormFromDraft(state.draft);
-  renderDocument(state.confirmed);
-
-  const canWrite = authPhase === 'current' && state.phase === 'current' && Boolean(revision);
-  const canEditDraft = canWrite || (state.phase === 'conflict' && state.conflictReason === 'revision');
-  [elements.section, elements.task, elements.url].forEach((element) => { element.disabled = !canEditDraft; });
-  elements.submit.disabled = !canWrite || !elements.task.value.trim() || !elements.section.value;
-  elements.refresh.disabled = authPhase !== 'current' || state.phase === 'loading' || state.phase === 'saving';
-  if (state.conflictReason === 'ambiguous') elements.refresh.disabled = true;
-  elements.retry.hidden = state.conflictReason !== 'ambiguous';
-  elements.retry.disabled = state.phase !== 'conflict' || authPhase !== 'current';
-  elements.copyDraft.disabled = !state.draft;
+  const snapshot = auth.snapshot();
+  const connected = snapshot.phase === 'current';
+  el.connLabel.textContent = tr('settingsConnection');
+  el.connState.textContent = connected
+    ? tr('settingsConnected').replace('{id}', `${(snapshot.credentialId || '').slice(0, 8)}…`)
+    : tr('settingsDisconnected');
+  el.connect.textContent = tr('settingsConnect');
+  el.forget.textContent = tr('settingsForget');
+  el.forget.hidden = snapshot.phase === 'missing';
+  el.forgetHint.textContent = tr('settingsForgetHint');
+  el.forgetHint.hidden = el.forget.hidden;
+  el.legacyLabel.textContent = tr('settingsLegacy');
+  el.legacyPrompt.textContent = tr('settingsLegacyPrompt');
+  el.legacyPrompt.hidden = ui.legacyChoice !== undefined;
+  el.legacySave.textContent = tr('settingsLegacySave');
+  renderLegacyOptions();
+  el.recoverySummary.textContent = tr('settingsRecovery');
+  el.recoveryHint.textContent = tr('settingsRecoveryHint');
+  el.pairingIdLabel.textContent = tr('pairingId');
+  el.pairingCodeLabel.textContent = tr('pairingCode');
+  el.pairingLabelLabel.textContent = tr('pairingLabel');
+  el.pair.textContent = tr('pairingSubmit');
 }
 
-function currentDraft() {
-  return {
-    kind: 'task.create',
-    sectionName: elements.section.value,
-    text: elements.task.value,
-    url: elements.url.value,
-  };
+function renderLegacyOptions() {
+  const fileTabs = sidepadFileTabs();
+  const current = el.legacySelect.value;
+  const options = [{ id: '', title: tr('settingsLegacyNone') }, ...fileTabs.map((tab) => ({
+    id: tab.id,
+    title: tab.title.toLowerCase().endsWith('.md') ? tab.title : `${tab.title}.md`,
+  }))];
+  const signature = JSON.stringify(options);
+  if (el.legacySelect.dataset.signature !== signature) {
+    el.legacySelect.replaceChildren(...options.map((option) => {
+      const node = document.createElement('option');
+      node.value = option.id;
+      node.textContent = option.title;
+      return node;
+    }));
+    el.legacySelect.dataset.signature = signature;
+  }
+  let selected;
+  if (ui.legacyChoice === undefined) {
+    // Первое подключение: exact dop.md только предлагается, сохраняет пользователь.
+    selected = el.legacySelect.dataset.touched ? current : (fileTabs.find((tab) => tab.title === 'dop' || tab.title === 'dop.md')?.id || '');
+  } else {
+    selected = el.legacySelect.dataset.touched ? current : (ui.legacyChoice || '');
+  }
+  el.legacySelect.value = options.some((option) => option.id === selected) ? selected : '';
+}
+
+function renderChrome() {
+  renderModebar();
+  renderSync();
+  renderNotice();
+  renderSettings();
+}
+
+/* ── Legacy dop.md choice ── */
+
+function applyLegacyChoice() {
+  const fileTabs = sidepadFileTabs();
+  backend.legacyTabId = ui.legacyChoice && fileTabs.some((tab) => tab.id === ui.legacyChoice) ? ui.legacyChoice : null;
+}
+
+function setLegacyChoice(tabId) {
+  ui.legacyChoice = tabId;
+  delete el.legacySelect.dataset.touched;
+  applyLegacyChoice();
+  localStore.set({ [LEGACY_CHOICE_KEY]: { tabId } }).catch(() => {});
+  sidepadRender();
+}
+
+el.legacySelect.addEventListener('change', () => { el.legacySelect.dataset.touched = '1'; });
+el.legacySave.addEventListener('click', () => {
+  setLegacyChoice(el.legacySelect.value || null);
+  if (ui.legacyChoice !== undefined && authPhase() === 'current') el.settings.hidden = true;
+});
+
+/* ── Connection ── */
+
+async function startConnect() {
+  const granted = await permissions.contains(ORIGIN_PERMISSION) || await permissions.request(ORIGIN_PERMISSION);
+  if (!granted) {
+    showHint('permissionDenied');
+    return;
+  }
+  await beginConnectAttempt({ storage: localStore });
+  ui.pending = true;
+  renderChrome();
+  chrome.tabs.create({ url: connectUrl(chrome.runtime.id) });
+}
+
+async function refreshPending() {
+  ui.pending = Boolean(await activeConnectAttempt({ storage: localStore }));
+}
+
+async function retryAmbiguous() {
+  await mode.retryAmbiguous();
+  if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
+    notify(mode.state.conflictReason === 'rejected' ? 'noticeRejected' : 'noticeConflict');
+    await mode.refresh({ quiet: true });
+  }
+}
+
+function openServerTab() {
+  ui.tabClosed = false;
+  localStore.remove([SERVER_TAB_CLOSED_KEY]).catch(() => {});
+  sidepadAttachServer(backend, SERVER_TAB, { focus: true });
+  applySnapshot({ force: true });
+  return SERVER_TAB_ID;
+}
+
+function showHint(key) {
+  el.hint.textContent = tr(key);
+  el.hint.hidden = false;
 }
 
 function showLocalError() {
-  elements.notice.textContent = 'The experimental client stopped on an unexpected local error.';
-  elements.status.textContent = 'error';
-  elements.status.dataset.phase = 'conflict';
+  notify('noticeRejected');
 }
 
-mode.subscribe(render);
+async function activate({ focus }) {
+  const stored = await localStore.get([LEGACY_CHOICE_KEY, SERVER_TAB_CLOSED_KEY]);
+  ui.legacyChoice = stored[LEGACY_CHOICE_KEY] ? stored[LEGACY_CHOICE_KEY].tabId : undefined;
+  ui.tabClosed = stored[SERVER_TAB_CLOSED_KEY] === true;
+  applyLegacyChoice();
+  await refreshPending();
+  sidepadAttachServer(backend, SERVER_TAB, { focus: focus && !ui.tabClosed, show: !ui.tabClosed });
+  ui.appliedRevision = null;
+  applySnapshot({ force: true });
+  if (ui.legacyChoice === undefined) el.settings.hidden = false;
+  renderChrome();
+  poller.start();
+}
 
-elements.toggle.addEventListener('change', async () => {
+async function deactivate() {
+  poller.stop();
+  ui.queue = [];
+  ui.notice = null;
+  ui.appliedRevision = null;
+  ui.pending = false;
+  await cancelConnectAttempt(localStore).catch(() => {});
+  await localStore.remove([SERVER_TAB_CLOSED_KEY]).catch(() => {});
+  backend.legacyTabId = null;
+  el.settings.hidden = true;
+  sidepadDetachServer();
+  renderChrome();
+}
+
+/* ── Events ── */
+
+el.toggle.addEventListener('change', async () => {
   try {
-    if (elements.toggle.checked) {
+    if (el.toggle.checked) {
       const enabled = await mode.enable();
       if (!enabled) {
-        elements.toggle.checked = false;
-        elements.hint.textContent = mode.lastEnableReason === 'legacy-auto-save'
-          ? 'turn off ↓auto first'
-          : 'permission not granted';
-        elements.hint.hidden = false;
+        el.toggle.checked = false;
+        showHint('permissionDenied');
+        return;
       }
+      await activate({ focus: true });
+      if (!auth.hasCredential()) await startConnect();
     } else {
       await mode.disable();
+      await deactivate();
     }
   } catch {
-    elements.toggle.checked = mode.enabled;
+    el.toggle.checked = mode.enabled;
     showLocalError();
+  }
+});
+
+el.settingsBtn.addEventListener('click', () => {
+  el.settings.hidden = !el.settings.hidden;
+  renderChrome();
+});
+el.openTab.addEventListener('click', () => openServerTab());
+el.connect.addEventListener('click', () => startConnect().catch(showLocalError));
+el.forget.addEventListener('click', () => mode.resetAuth().catch(showLocalError));
+
+el.pairingForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const pairing = {
+    pairingId: el.pairingId.value.trim(),
+    code: el.pairingCode.value,
+    label: el.pairingLabel.value.trim(),
+  };
+  el.pairingId.value = '';
+  el.pairingCode.value = '';
+  try {
+    await mode.pair(pairing);
+    el.settings.hidden = ui.legacyChoice === undefined ? false : true;
+  } catch {
+    showHint('pairingFailed');
   }
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== 'local' || !mode.enabled || !changes.tabs?.newValue?.some((tab) => tab.autoSave)) return;
-  mode.disable().catch(showLocalError);
-});
-
-elements.refresh.addEventListener('click', () => mode.refresh().catch(showLocalError));
-elements.retry.addEventListener('click', () => mode.retryAmbiguous().catch(showLocalError));
-elements.reset.addEventListener('click', async () => {
-  try {
-    await mode.disable();
-  } catch {
-    showLocalError();
+  if (areaName !== 'local' || !mode.enabled) return;
+  if (changes[API_CREDENTIAL_STORAGE_KEY]) {
+    mode.reloadAuth().catch(showLocalError);
+  }
+  if (changes[CONNECT_PENDING_STORAGE_KEY]) {
+    refreshPending().then(renderChrome).catch(() => {});
   }
 });
 
-elements.pairingForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const pairing = {
-    pairingId: elements.pairingId.value.trim(),
-    code: elements.pairingCode.value,
-    label: elements.pairingLabel.value.trim(),
-  };
-  try {
-    const attempt = mode.pair(pairing);
-    elements.pairingId.value = '';
-    elements.pairingCode.value = '';
-    await attempt;
-  } catch (error) {
-    if (!(error instanceof PairingError)) {
-      showLocalError();
-      return;
-    }
-    const messages = {
-      'invalid-input': 'Enter the complete pairing ID, one-time code and a label up to 80 characters.',
-      'invalid-or-expired': 'The pairing is invalid, expired or already used. Create a new one in Notes Lab.',
-      'origin-forbidden': 'Notes Lab rejected this extension origin. Pairing remains locked.',
-      offline: 'Notes Lab is unavailable. No pairing data was saved; try again manually.',
-      'invalid-response': 'Notes Lab returned an invalid pairing response. No credential was saved.',
-      'storage-failed': 'The issued credential could not be saved locally. Revoke it in Notes Lab and create a new pairing.',
-      'service-unavailable': 'Notes Lab could not complete pairing. Try again manually.',
-    };
-    elements.notice.textContent = messages[error.reason] || 'Pairing failed safely. Try again manually.';
-  }
-});
+mode.subscribe(onModeChange);
 
-elements.forgetAuth.addEventListener('click', () => mode.resetAuth().catch(showLocalError));
-
-[elements.section, elements.task, elements.url].forEach((element) => {
-  element.addEventListener('input', () => mode.setDraft(currentDraft()).catch(showLocalError));
-});
-
-elements.form.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const draft = currentDraft();
-  const section = sectionsFrom(mode.state.confirmed).find((item) => item.name === draft.sectionName);
-  if (!section?.ref || !draft.text.trim()) return;
-  try {
-    await mode.setDraft(draft);
-    const saved = await mode.submit({
-      type: 'task.create',
-      section_ref: section.ref,
-      task: { text: draft.text.trim(), url: draft.url.trim() || null },
-    });
-    if (saved) {
-      elements.task.value = '';
-      elements.url.value = '';
-      render(mode.snapshot());
-    }
-  } catch {
-    showLocalError();
-  }
-});
-
-elements.copyDraft.addEventListener('click', async () => {
-  if (!mode.state.draft) return;
-  try {
-    await navigator.clipboard.writeText(JSON.stringify(mode.state.draft, null, 2));
-    elements.notice.textContent = 'Draft copied locally.';
-  } catch {
-    showLocalError();
-  }
-});
-
-mode.init().catch(showLocalError);
+sidepadReady
+  .then(() => mode.init())
+  .then(async () => {
+    if (mode.enabled) await activate({ focus: false });
+    // Режим мог выключиться при старте (например, доступ к notes.lab отозван
+    // в браузере): сохранённая вкладка notes.md без backend была бы мёртвой.
+    else if (sidepadServerTabId()) await deactivate();
+    else renderChrome();
+  })
+  .catch(showLocalError);

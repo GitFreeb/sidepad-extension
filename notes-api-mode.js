@@ -2,6 +2,7 @@ import {
   AmbiguousMutationError,
   AuthRequiredError,
   OfflineError,
+  OperationRejectedError,
   RevisionConflictError,
 } from './notes-api-client.js';
 import { createApiState, reduceApiState, canMutate } from './notes-api-state.js';
@@ -36,6 +37,9 @@ export class NotesApiMode {
     this.loading = false;
     this.storageQueue = Promise.resolve();
     this.lastEnableReason = null;
+    // Растёт при каждой отправке мутации: чтение, начатое раньше записи,
+    // не должно перезаписать более новый результат этой записи.
+    this.writeSeq = 0;
   }
 
   subscribe(listener) {
@@ -58,14 +62,8 @@ export class NotesApiMode {
   }
 
   async init() {
-    const stored = await this.storage.get([API_MODE_STORAGE_KEY, API_SESSION_STORAGE_KEY, 'tabs']);
+    const stored = await this.storage.get([API_MODE_STORAGE_KEY, API_SESSION_STORAGE_KEY]);
     if (stored[API_MODE_STORAGE_KEY] !== true) {
-      this.emit();
-      return;
-    }
-    if (stored.tabs?.some((tab) => tab.autoSave)) {
-      await this.clearApiStorage();
-      await this.permissions.remove(this.originPermission);
       this.emit();
       return;
     }
@@ -102,11 +100,6 @@ export class NotesApiMode {
 
   async enable() {
     if (this.enabled) return true;
-    const legacy = await this.storage.get(['tabs']);
-    if (legacy.tabs?.some((tab) => tab.autoSave)) {
-      this.lastEnableReason = 'legacy-auto-save';
-      return false;
-    }
     this.lastEnableReason = null;
     const granted = await this.permissions.request(this.originPermission);
     if (!granted) {
@@ -159,16 +152,20 @@ export class NotesApiMode {
     await this.storageQueue;
   }
 
-  async refresh() {
+  async refresh({ quiet = false } = {}) {
     if (!this.enabled || !this.client || this.loading || this.state.phase === 'saving' || this.state.pendingMutation) return false;
     const epoch = this.epoch;
     const client = this.client;
+    const writeSeq = this.writeSeq;
     this.loading = true;
-    this.state = reduceApiState(this.state, { type: 'LOAD_START' });
-    this.emit();
+    if (!quiet) {
+      this.state = reduceApiState(this.state, { type: 'LOAD_START' });
+      this.emit();
+    }
     try {
       const result = await client.load({ etag: this.state.confirmed?.etag });
       if (this.epoch !== epoch) return false;
+      if (this.writeSeq !== writeSeq) return false;
       if (result.notModified) {
         this.state = reduceApiState(this.state, {
           type: 'LOAD_NOT_MODIFIED',
@@ -188,6 +185,7 @@ export class NotesApiMode {
       }
     } catch (error) {
       if (this.epoch !== epoch) return false;
+      if (this.writeSeq !== writeSeq) return false;
       if (error instanceof AuthRequiredError) {
         await this.rejectAuth(error.status);
         this.state = reduceApiState(this.state, { type: 'AUTH_REQUIRED' });
@@ -229,6 +227,30 @@ export class NotesApiMode {
       await this.persistSession();
       if (this.epoch === epoch) this.emit();
       return this.epoch === epoch;
+    }
+    this.state = reduceApiState(this.state, { type: 'AUTH_RECOVERY_START' });
+    await this.persistSession();
+    if (this.epoch !== epoch) return false;
+    this.emit();
+    return this.refresh();
+  }
+
+  // Credential записывает service worker после автоподключения из web.
+  async reloadAuth() {
+    if (!this.enabled || !this.auth) return false;
+    const epoch = this.epoch;
+    await this.auth.init();
+    if (this.epoch !== epoch) return false;
+    if (!this.auth.hasCredential()) {
+      this.client = null;
+      this.emit();
+      return false;
+    }
+    if (this.client) return true;
+    this.client = this.clientFactory();
+    if (this.state.conflictReason === 'ambiguous' && this.state.pendingMutation) {
+      this.emit();
+      return true;
     }
     this.state = reduceApiState(this.state, { type: 'AUTH_RECOVERY_START' });
     await this.persistSession();
@@ -286,6 +308,7 @@ export class NotesApiMode {
     const epoch = this.epoch;
     const client = this.client;
     const priorState = this.state;
+    this.writeSeq += 1;
     this.state = { ...this.state, phase: 'current' };
     this.state = reduceApiState(this.state, { type: 'SAVE_START', mutation });
     await this.persistSession();
@@ -310,6 +333,8 @@ export class NotesApiMode {
           type: 'SAVE_CONFLICT',
           currentRevision: error.currentRevision,
         });
+      } else if (error instanceof OperationRejectedError) {
+        this.state = reduceApiState(priorState, { type: 'SAVE_REJECTED' });
       } else if (error instanceof AmbiguousMutationError) {
         this.state = reduceApiState(priorState, { type: 'SAVE_AMBIGUOUS', mutation: error.mutation });
       } else if (error instanceof AuthRequiredError) {
