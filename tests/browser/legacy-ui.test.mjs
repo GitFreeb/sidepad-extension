@@ -232,3 +232,16 @@ test('legacy mode never contacts Notes API from the panel or the service worker'
   const stored = await page.evaluate(`__t.storage(null)`);
   assert.equal(Object.keys(stored).some((key) => key.startsWith('notesApi')), false);
 });
+
+test('file tabs keep a section named «Неразобранные» in place and fully editable', { skip }, async () => {
+  await reloadWithStorage(page, {
+    tabs: [legacyTab('tab_inbox', 'inbox', [['First', ['a']], ['Неразобранные', ['b']]])],
+    activeTabId: 'tab_inbox',
+  });
+  assert.deepEqual((await model()).map((s) => s.name), ['First', 'Неразобранные']);
+  assert.equal(await page.evaluate(`__t.section('Неразобранные').classList.contains('inbox')`), false);
+  assert.equal(await page.evaluate(`document.getElementById('taskInput').maxLength`), 240);
+  await page.evaluate(`__t.section('Неразобранные').querySelector('.btn-rename-section').click()`);
+  await page.evaluate(`__t.type('.section-rename-input', 'Renamed')`);
+  assert.deepEqual((await model()).map((s) => s.name), ['First', 'Renamed']);
+});

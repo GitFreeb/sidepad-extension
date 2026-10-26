@@ -375,6 +375,7 @@ On the first connection Sidepad asks which tab holds the old list (`dop.md` is s
 - Refs are valid only in their revision and are resolved again after every response.
 - A `409` conflict rereads the document without replaying the operation. A lost response requires an explicit “retry” with the same `operation_id`.
 - Offline shows the last confirmed snapshot read-only — no queue, no automatic replay.
+- The «Неразобранные» section (the Whisper import inbox) is pinned on top of `notes.md` and highlighted, as in Notes Lab web; the document order itself is unchanged. The section cannot be renamed, deleted or dragged, because the import looks it up by its exact name. Its tasks are edited as usual, long voice notes included: the text limit is 10,000 characters, as in web.
 - **✕ clear** on `notes.md` only closes the local tab; the tasks stay on the server. Bring it back with “open notes.md”.
 
 ## Drag and Drop
