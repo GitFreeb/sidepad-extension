@@ -9,7 +9,9 @@ export function backoffDelay(failures) {
 
 export class VisiblePoller {
   // tick() возвращает 'ok' или 'backoff'; исключение считается неудачей.
-  constructor({ tick, isVisible, schedule = setTimeout, cancel = clearTimeout }) {
+  // Обёртки обязательны: setTimeout, вызванный как метод объекта, в браузере
+  // бросает Illegal invocation.
+  constructor({ tick, isVisible, schedule = (fn, delay) => setTimeout(fn, delay), cancel = (timer) => clearTimeout(timer) }) {
     this.tick = tick;
     this.isVisible = isVisible;
     this.schedule = schedule;
@@ -34,9 +36,19 @@ export class VisiblePoller {
   }
 
   wake() {
-    if (!this.running || this.inFlight || !this.isVisible()) return;
+    if (!this.running || this.inFlight) return;
     this.clearTimer();
-    this.run();
+    if (this.isVisible()) this.run();
+    else this.recheckLater();
+  }
+
+  // Скрытая панель не ходит в сеть; таймер лишь перепроверяет видимость,
+  // чтобы не зависеть от того, придёт ли visibilitychange.
+  recheckLater() {
+    this.timer = this.schedule(() => {
+      this.timer = null;
+      return this.wake();
+    }, POLL_INTERVAL_MS);
   }
 
   clearTimer() {
@@ -56,8 +68,12 @@ export class VisiblePoller {
     if (generation !== this.generation) return;
     this.inFlight = false;
     this.failures = result === 'backoff' ? this.failures + 1 : 0;
-    if (!this.running || !this.isVisible()) return;
+    if (!this.running) return;
     this.clearTimer();
+    if (!this.isVisible()) {
+      this.recheckLater();
+      return;
+    }
     this.timer = this.schedule(() => {
       this.timer = null;
       return this.wake();

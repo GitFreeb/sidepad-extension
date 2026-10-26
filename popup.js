@@ -37,6 +37,62 @@ const I18N = {
     langLabel:          'RU',
     updateAvailable:      'Доступна версия {version} → Обновить',
     updateBannerClose:    'Скрыть',
+    serverCloseConfirm:   'Вкладка будет закрыта, задачи останутся на сервере.',
+    legacyCloseConfirm:   'Вкладка будет закрыта. Файл не изменится.',
+    serverPath:           'notes.lab/',
+    filePath:             '~/tasks/',
+    syncCurrent:          '✓',
+    syncCurrentTitle:     'Синхронизировано с Notes Lab',
+    syncSaving:           '↻',
+    syncSavingTitle:      'Сохраняем изменение на сервере',
+    syncLoading:          '↻',
+    syncLoadingTitle:     'Загружаем notes.md',
+    syncOffline:          'офлайн',
+    syncOfflineTitle:     'Notes Lab недоступен — показан последний снимок, правка выключена',
+    syncConflict:         '⚠',
+    syncConflictTitle:    'Документ изменился — перечитываем',
+    syncRetry:            '⚠ повтор',
+    syncRetryTitle:       'Ответ сервера потерян — нужен явный повтор',
+    syncAuth:             'нет связи',
+    syncAuthTitle:        'Sidepad не подключён к Notes Lab',
+    syncPending:          'ожидает',
+    syncPendingTitle:     'Подтвердите подключение на вкладке Notes Lab',
+    noticeStale:          'Документ изменился на сервере — действие не применено, список обновлён.',
+    noticeConflict:       'Документ изменился на сервере — действие не применено, список обновлён.',
+    noticeRejected:       'Сервер отклонил действие — список обновлён.',
+    noticeAmbiguous:      'Ответ сервера потерян. Результат неизвестен — повторите то же действие явно.',
+    noticeOffline:        'Notes Lab недоступен. Показан последний снимок, правка выключена.',
+    noticeAuth:           'Sidepad не подключён к Notes Lab.',
+    noticeRejectedAuth:   'Сервер отклонил ключ Sidepad. Подключите заново.',
+    noticePending:        'Подтвердите подключение на открывшейся вкладке Notes Lab.',
+    noticeDuplicateSection: 'Секция с таким именем уже есть.',
+    noticeLegacy:         'legacy · только чтение. Задачи теперь в notes.md.',
+    noticeConnected:      'Sidepad подключён к Notes Lab.',
+    actionRetry:          'повторить',
+    actionConnect:        'подключить',
+    actionGoServer:       'перейти в notes.md',
+    actionCloseTab:       'закрыть вкладку',
+    openServerTab:        'открыть notes.md',
+    settingsTitle:        'Настройки Notes API',
+    settingsConnection:   'Подключение',
+    settingsConnected:    'подключено · клиент {id}',
+    settingsDisconnected: 'не подключено',
+    settingsConnect:      'подключить',
+    settingsForget:       'забыть ключ на этом устройстве',
+    settingsForgetHint:   'Ключ удаляется только здесь. Отозвать его можно в Notes Lab.',
+    settingsLegacy:       'Legacy-вкладка (только чтение)',
+    settingsLegacyNone:   'нет',
+    settingsLegacySave:   'сохранить',
+    settingsLegacyPrompt: 'Выберите вкладку со старым списком: пока включён Notes API, она будет только для чтения.',
+    settingsRecovery:     'восстановление',
+    settingsRecoveryHint: 'Ручное подключение: создайте одноразовый код в Notes Lab и введите его здесь.',
+    pairingId:            'Pairing ID',
+    pairingCode:          'Одноразовый код',
+    pairingLabel:         'Имя клиента',
+    pairingSubmit:        'подключить вручную',
+    pairingFailed:        'Подключение не удалось. Создайте новый код в Notes Lab.',
+    permissionDenied:     'нет доступа к notes.lab',
+    closeLabel:           'закрыть',
   },
   en: {
     selectSectionPlaceholder: 'Select section',
@@ -72,6 +128,62 @@ const I18N = {
     langLabel:          'EN',
     updateAvailable:      'Version {version} is available → Update',
     updateBannerClose:    'Dismiss',
+    serverCloseConfirm:   'The tab will be closed; the tasks stay on the server.',
+    legacyCloseConfirm:   'The tab will be closed. The file stays unchanged.',
+    serverPath:           'notes.lab/',
+    filePath:             '~/tasks/',
+    syncCurrent:          '✓',
+    syncCurrentTitle:     'Synced with Notes Lab',
+    syncSaving:           '↻',
+    syncSavingTitle:      'Saving the change on the server',
+    syncLoading:          '↻',
+    syncLoadingTitle:     'Loading notes.md',
+    syncOffline:          'offline',
+    syncOfflineTitle:     'Notes Lab is unavailable — showing the last snapshot, editing is off',
+    syncConflict:         '⚠',
+    syncConflictTitle:    'The document changed — reloading',
+    syncRetry:            '⚠ retry',
+    syncRetryTitle:       'The server response was lost — an explicit retry is required',
+    syncAuth:             'not linked',
+    syncAuthTitle:        'Sidepad is not connected to Notes Lab',
+    syncPending:          'waiting',
+    syncPendingTitle:     'Confirm the connection in the Notes Lab tab',
+    noticeStale:          'The document changed on the server — the action was not applied, the list is refreshed.',
+    noticeConflict:       'The document changed on the server — the action was not applied, the list is refreshed.',
+    noticeRejected:       'The server rejected the action — the list is refreshed.',
+    noticeAmbiguous:      'The server response was lost. The result is unknown — retry the same action explicitly.',
+    noticeOffline:        'Notes Lab is unavailable. Showing the last snapshot, editing is off.',
+    noticeAuth:           'Sidepad is not connected to Notes Lab.',
+    noticeRejectedAuth:   'The server rejected the Sidepad key. Connect again.',
+    noticePending:        'Confirm the connection in the Notes Lab tab that just opened.',
+    noticeDuplicateSection: 'A section with this name already exists.',
+    noticeLegacy:         'legacy · read-only. Tasks now live in notes.md.',
+    noticeConnected:      'Sidepad is connected to Notes Lab.',
+    actionRetry:          'retry',
+    actionConnect:        'connect',
+    actionGoServer:       'go to notes.md',
+    actionCloseTab:       'close tab',
+    openServerTab:        'open notes.md',
+    settingsTitle:        'Notes API settings',
+    settingsConnection:   'Connection',
+    settingsConnected:    'connected · client {id}',
+    settingsDisconnected: 'not connected',
+    settingsConnect:      'connect',
+    settingsForget:       'forget the key on this device',
+    settingsForgetHint:   'The key is removed only here. Revoke it in Notes Lab.',
+    settingsLegacy:       'Legacy tab (read-only)',
+    settingsLegacyNone:   'none',
+    settingsLegacySave:   'save',
+    settingsLegacyPrompt: 'Pick the tab with the old list: while Notes API is on it stays read-only.',
+    settingsRecovery:     'recovery',
+    settingsRecoveryHint: 'Manual connection: create a one-time code in Notes Lab and enter it here.',
+    pairingId:            'Pairing ID',
+    pairingCode:          'One-time code',
+    pairingLabel:         'Client name',
+    pairingSubmit:        'connect manually',
+    pairingFailed:        'Connection failed. Create a new code in Notes Lab.',
+    permissionDenied:     'no access to notes.lab',
+    closeLabel:           'close',
   },
 };
 
@@ -194,11 +306,49 @@ let justExpandedSection = null;
 let selectedSection = null;
 let allCollapsed = false;
 
+/* ── Server-backed notes.md tab ──
+   Вкладка notes.md хранится в Notes API, а не в файле. Рендер и обработчики
+   остаются общими; меняется только то, куда уходит изменение: popup-api.js
+   регистрирует backend, и каждая мутация на этой вкладке превращается в
+   semantic operation, а tasks/sections приходят только из ответа сервера. */
+const SERVER_TAB_STORAGE = 'notes-api';
+const API_MODE_KEY = 'notesApiExperimentalModeV1';
+let serverBackend = null;
+let resolveSidepadReady;
+const sidepadReady = new Promise((resolve) => { resolveSidepadReady = resolve; });
+
+function isServerTab(tab = getActiveTab()) {
+  return tab?.storage === SERVER_TAB_STORAGE;
+}
+
+function isLegacyLockedTab(tab = getActiveTab()) {
+  return !!tab && !!serverBackend && serverBackend.legacyTabId === tab.id;
+}
+
+function isReadOnlyTab(tab = getActiveTab()) {
+  if (isLegacyLockedTab(tab)) return true;
+  return isServerTab(tab) && !serverBackend?.canWrite();
+}
+
+// Возвращает true, если действие перехвачено (server-backed или read-only
+// вкладка) и локальная мутация выполняться не должна.
+function routeIntent(intent) {
+  if (isReadOnlyTab()) return true;
+  if (!isServerTab()) return false;
+  serverBackend?.dispatch(intent);
+  return true;
+}
+
+function sidepadServerBusy() {
+  return editingId !== null || renamingSection !== null || moveMenuTaskId !== null || dragType !== null;
+}
+
 function applyAutoSaveButton(tab) {
   const on      = !!tab?.autoSave;
   const pending = on && pendingReconnect.has(tab.id);
   const btn = document.getElementById('autoSaveBtn');
   if (btn) {
+    btn.hidden = isServerTab(tab);
     btn.textContent = tr('autoSaveLabel') + (pending ? ' ⚠' : '');
     btn.title       = pending ? tr('autoSavePendingTitle') : (on ? tr('autoSaveOnTitle') : tr('autoSaveOffTitle'));
     btn.classList.toggle('off', !on);
@@ -216,7 +366,10 @@ function getActiveTab() {
 }
 
 function saveAllTabs() {
-  chrome.storage.local.set({ tabs, activeTabId });
+  // Содержимое notes.md живёт на сервере и в снимке Notes API — в tabs
+  // хранится только место вкладки.
+  const stored = tabs.map(t => isServerTab(t) ? { ...t, tasks: [], sections: [] } : t);
+  chrome.storage.local.set({ tabs: stored, activeTabId });
 }
 
 function updateTabOverflow() {
@@ -254,10 +407,11 @@ function renderTabs() {
       ? `<input class="tab-rename-input" data-rename-id="${escapeHtml(tab.id)}" value="${escapeHtml(tab.title)}" maxlength="60" draggable="false">`
       : `<span class="tab-name">${escapeHtml(display)}</span>`;
     const isRenaming = tab.id === renamingTabId;
-    return `<div class="tab${isActive ? ' active' : ''}" data-tab-id="${escapeHtml(tab.id)}" draggable="${isRenaming ? 'false' : 'true'}">
+    const marker = isServerTab(tab) ? ' server' : isLegacyLockedTab(tab) ? ' legacy-locked' : '';
+    return `<div class="tab${isActive ? ' active' : ''}${marker}" data-tab-id="${escapeHtml(tab.id)}" draggable="${isRenaming ? 'false' : 'true'}">
       <span class="tab-icon">✳</span>
       ${nameHtml}
-      <button class="tab-close" data-close-id="${escapeHtml(tab.id)}" title="${tr('tabCloseTitle')}" draggable="false">×</button>
+      <button class="tab-close" data-close-id="${escapeHtml(tab.id)}" title="${tr(isServerTab(tab) || isLegacyLockedTab(tab) ? 'closeLabel' : 'tabCloseTitle')}" draggable="false">×</button>
     </div>`;
   }).join('');
 
@@ -305,13 +459,24 @@ function closeTab(id) {
   if (tabIdx === -1) return;
   const tab = tabs[tabIdx];
   if (id === activeTabId) { tab.tasks = tasks; tab.sections = sections; }
-  if (tab.autoSave) {
+  // notes.md и read-only legacy закрываются только локально: ни mutation
+  // request, ни записи в файл.
+  if (isServerTab(tab) || isLegacyLockedTab(tab)) {
+    if (!confirm(tr(isServerTab(tab) ? 'serverCloseConfirm' : 'legacyCloseConfirm'))) return;
+    if (isServerTab(tab)) serverBackend?.onServerTabClosed();
+    else serverBackend?.onLegacyTabClosed();
+  } else if (tab.autoSave) {
     if (tab.tasks.length > 0 && tab.title !== 'example') autoSaveMdData(tab.id, tab.tasks, tab.title, tab.sections);
   } else if (tab.tasks.length > 0 && tab.title !== 'default' && tab.title !== 'example') {
     if (!confirm(tr('closeNoSaveConfirm'))) return;
   }
 
   // Last tab: reset to default instead of removing
+  if (tabs.length === 1 && isServerTab(tab)) {
+    tabs.splice(tabIdx, 1);
+    switchToOrCreateDefault();
+    return;
+  }
   if (tabs.length === 1) {
     stopSync(tab.id);
     deleteStoredHandle(tab.id);
@@ -376,7 +541,10 @@ document.getElementById('tabStrip').addEventListener('click', (e) => {
 document.getElementById('tabStrip').addEventListener('dblclick', (e) => {
   if (e.target.closest('[data-close-id]')) return;
   const tabEl = e.target.closest('[data-tab-id]');
-  if (tabEl) { renamingTabId = tabEl.dataset.tabId; renderTabs(); }
+  if (tabEl && !isServerTab(tabs.find(t => t.id === tabEl.dataset.tabId))) {
+    renamingTabId = tabEl.dataset.tabId;
+    renderTabs();
+  }
 });
 
 function finishRename(input) {
@@ -423,9 +591,15 @@ function migrateDefaultSection(tab) {
 }
 
 function loadAll() {
-  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang'], async (data) => {
+  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang', API_MODE_KEY], async (data) => {
     applyTheme(!!data.lightMode);
     applyLang(data.lang || 'en', false);
+
+    // Без включённого Notes API вкладка notes.md не показывается вовсе —
+    // legacy-интерфейс восстанавливается полностью.
+    if (data[API_MODE_KEY] !== true && data.tabs) {
+      data.tabs = data.tabs.filter(t => !isServerTab(t));
+    }
 
     if (data.tabs && data.tabs.length > 0) {
       tabs = data.tabs.map(migrateDefaultSection);
@@ -451,6 +625,7 @@ function loadAll() {
     renderTabs();
     render();
     checkForUpdate();
+    resolveSidepadReady();
 
     await restoreAutoSync();
     applyAutoSaveButton(getActiveTab());
@@ -469,7 +644,7 @@ async function restoreAutoSync() {
   // обработчик #autoSaveBtn).
   if (!window.showOpenFilePicker) return;
   for (const tab of tabs) {
-    if (!tab.autoSave) continue;
+    if (!tab.autoSave || isServerTab(tab)) continue;
     // Один упавший handle (например, IndexedDB недоступна) не должен
     // обрывать восстановление остальных вкладок — поэтому try/catch внутри
     // цикла, а не вокруг него целиком.
@@ -496,7 +671,7 @@ async function restoreAutoSync() {
 
 function saveTasks() {
   const tab = getActiveTab();
-  if (tab) {
+  if (tab && !isServerTab(tab)) {
     tab.tasks    = tasks;
     tab.sections = sections;
     saveAllTabs();
@@ -522,7 +697,7 @@ document.getElementById('langBtn').addEventListener('click', () => {
 
 document.getElementById('autoSaveBtn').addEventListener('click', async () => {
   const tab = getActiveTab();
-  if (!tab || tab.title === 'example') return;
+  if (!tab || tab.title === 'example' || isServerTab(tab)) return;
 
   if (tab.autoSave && !pendingReconnect.has(tab.id)) {
     tab.autoSave = false;
@@ -1009,6 +1184,7 @@ function clearDragUI() {
 }
 
 function moveTask(sourceId, targetId, pos) {
+  if (routeIntent({ kind: 'task.move', id: sourceId, anchorId: targetId, position: pos })) return;
   const srcTask = tasks.find(t => t.id === sourceId);
   const tgtTask = tasks.find(t => t.id === targetId);
   if (!srcTask || !tgtTask) return;
@@ -1020,6 +1196,7 @@ function moveTask(sourceId, targetId, pos) {
 }
 
 function moveTaskToSection(sourceId, targetSection, pos = 'end') {
+  if (routeIntent({ kind: 'task.move', id: sourceId, sectionName: targetSection, position: pos })) return;
   const srcTask = tasks.find(t => t.id === sourceId);
   if (!srcTask) return;
   const arr = tasks.filter(t => t.id !== sourceId);
@@ -1040,6 +1217,7 @@ function moveTaskToSection(sourceId, targetSection, pos = 'end') {
 }
 
 function moveSection(sourceName, targetName, pos) {
+  if (routeIntent({ kind: 'section.move', sectionName: sourceName, anchorName: targetName, position: pos })) return;
   const srcTasks = tasks.filter(t => t.section === sourceName);
   const rest     = tasks.filter(t => t.section !== sourceName);
   let first = -1, last = -1;
@@ -1157,7 +1335,10 @@ function saveEdit(input) {
   const text = input.value.trim();
   const id   = editingId;
   editingId  = null;
-  if (text) {
+  const prev = tasks.find(t => t.id === id);
+  if (text && isServerTab()) {
+    if (prev && prev.text !== text) routeIntent({ kind: 'task.update', id, text });
+  } else if (text && !isReadOnlyTab()) {
     tasks = tasks.map(t => t.id === id ? { ...t, text } : t);
     saveTasks();
   }
@@ -1179,6 +1360,11 @@ function render() {
 
   const doneCount = tasks.filter(t => t.done).length;
   counter.textContent = `${doneCount} / ${tasks.length}`;
+
+  const readOnly = isReadOnlyTab();
+  document.getElementById('legacyMode').classList.toggle('readonly', readOnly);
+  document.querySelector('.bc-path').textContent = tr(isServerTab() ? 'serverPath' : 'filePath');
+  serverBackend?.renderChrome();
 
   if (!tasks.length && !sections.length) {
     justExpandedSection = null;
@@ -1213,15 +1399,15 @@ function render() {
     const isCollapsed = collapsedSections.has(title);
     const isRenaming  = renamingSection === title;
 
-    html += `<li class="section-header${isCollapsed ? ' collapsed' : ''}" data-section="${escapeHtml(title)}" data-action="toggle-section" draggable="${isRenaming ? 'false' : 'true'}">
+    html += `<li class="section-header${isCollapsed ? ' collapsed' : ''}" data-section="${escapeHtml(title)}" data-action="toggle-section" draggable="${isRenaming || readOnly ? 'false' : 'true'}">
       ${isRenaming
         ? `<input class="section-rename-input" data-rename-section="${escapeHtml(title)}" value="${escapeHtml(title)}" maxlength="80" draggable="false">`
         : `<span class="section-title">${escapeHtml(title)}</span>`}
       <div class="section-right">
         ${!isRenaming && items.length > 0 ? `<span class="section-count">${secDone}/${items.length}</span>` : ''}
         ${!isRenaming ? `<span class="section-caret">›</span>` : ''}
-        ${!isRenaming ? `<button class="btn-rename-section" data-action="rename-section" data-section="${escapeHtml(title)}" title="${tr('renameSectionTitle')}" draggable="false">✎</button>` : ''}
-        <button class="btn-delete-section" data-action="delete-section" data-section="${escapeHtml(title)}" title="${tr('deleteSectionTitle')}" draggable="false">×</button>
+        ${!isRenaming && !readOnly ? `<button class="btn-rename-section" data-action="rename-section" data-section="${escapeHtml(title)}" title="${tr('renameSectionTitle')}" draggable="false">✎</button>` : ''}
+        ${!readOnly ? `<button class="btn-delete-section" data-action="delete-section" data-section="${escapeHtml(title)}" title="${tr('deleteSectionTitle')}" draggable="false">×</button>` : ''}
       </div>
     </li>`;
 
@@ -1238,9 +1424,9 @@ function render() {
               ${otherSecs.map(s => `<li data-action="move-to-section" data-section="${escapeHtml(s)}">${escapeHtml(s)}</li>`).join('')}
             </ul>`
           : '';
-        html += `<li class="task-item ${task.done ? 'done' : ''}${isEditing ? ' editing' : ''}${isMoveOpen ? ' move-open' : ''}" data-id="${task.id}" draggable="${isEditing ? 'false' : 'true'}">
+        html += `<li class="task-item ${task.done ? 'done' : ''}${isEditing ? ' editing' : ''}${isMoveOpen ? ' move-open' : ''}" data-id="${task.id}" draggable="${isEditing || readOnly ? 'false' : 'true'}">
           <span class="drag-handle" draggable="false">⠿</span>
-          <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''} draggable="false">
+          <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
           <div class="task-content">
             ${isEditing
               ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="240" draggable="false">`
@@ -1250,10 +1436,10 @@ function render() {
               : ''}
           </div>
           <button class="btn-copy" data-action="copy" title="${tr('copyTitle')}" draggable="false">⧉</button>
-          ${otherSecs.length > 0
+          ${otherSecs.length > 0 && !readOnly
             ? `<button class="btn-move" data-action="move-task" title="${tr('moveToTitle')}" draggable="false">→</button>`
             : ''}
-          ${task.id > 10000
+          ${task.id > 10000 && !readOnly
             ? `<button class="btn-delete" data-action="delete" title="${tr('deleteTitle')}" draggable="false">×</button>`
             : ''}
           ${moveMenuHtml}
@@ -1302,6 +1488,12 @@ function finishSectionRename(input) {
   const newName = input.value.trim();
   renamingSection = null;
   if (!newName || newName === oldName) { render(); return; }
+  if (isServerTab() && sections.includes(newName)) {
+    serverBackend?.notify('noticeDuplicateSection');
+    render();
+    return;
+  }
+  if (routeIntent({ kind: 'section.update', sectionName: oldName, name: newName })) { render(); return; }
   sections = [...new Set(sections.map(s => s === oldName ? newName : s))];
   tasks    = tasks.map(t => t.section === oldName ? { ...t, section: newName } : t);
   if (collapsedSections.has(oldName)) {
@@ -1314,6 +1506,7 @@ function finishSectionRename(input) {
 
 /* ── List interactions ── */
 function deleteSection(name) {
+  if (routeIntent({ kind: 'section.delete', sectionName: name })) return;
   collapsedSections.delete(name);
   sections = sections.filter(s => s !== name);
   tasks    = tasks.filter(t => t.section !== name);
@@ -1330,7 +1523,7 @@ document.getElementById('taskList').addEventListener('click', (e) => {
   }
 
   const renameSecBtn = e.target.closest('[data-action="rename-section"]');
-  if (renameSecBtn) {
+  if (renameSecBtn && !isReadOnlyTab()) {
     e.stopPropagation();
     renamingSection = renameSecBtn.dataset.section;
     render();
@@ -1390,6 +1583,12 @@ document.getElementById('taskList').addEventListener('click', (e) => {
     }
     return;
   }
+  if (action === 'toggle' && routeIntent({ kind: 'task.toggle', id })) {
+    render();
+    return;
+  }
+  if (action === 'delete' && routeIntent({ kind: 'task.delete', id })) return;
+  if (action === 'edit-text' && isReadOnlyTab()) return;
   if (action === 'toggle') {
     const wasUndone = !tasks.find(t => t.id === id).done;
     tasks = tasks.map(t => t.id === id ? { ...t, done: !t.done } : t);
@@ -1492,6 +1691,7 @@ function addSection() {
   const input = document.getElementById('sectionInput');
   const name  = input.value.trim();
   if (!name) return;
+  if (routeIntent({ kind: 'section.create', name })) { input.value = ''; return; }
   if (!sections.includes(name)) {
     sections.unshift(name);
     saveTasks();
@@ -1510,6 +1710,7 @@ function addTask() {
   const linkEl = document.getElementById('linkInput');
   const text   = textEl.value.trim();
   if (!text) return;
+  if (isReadOnlyTab()) return;
 
   let section = selectedSection;
   if (!section) {
@@ -1520,6 +1721,17 @@ function addTask() {
     } else {
       section = getNextSectionName(sections);
     }
+  }
+  if (isServerTab()) {
+    // Новая секция появится в sections только из ответа сервера.
+    routeIntent({ kind: 'task.create', sectionName: section, text, url: linkEl.value.trim() });
+    textEl.value = '';
+    linkEl.value = '';
+    setSection(null);
+    textEl.focus();
+    return;
+  }
+  if (!selectedSection) {
     if (!sections.includes(section)) sections.unshift(section);
   } else if (!sections.includes(section)) {
     sections.push(section);
@@ -1624,6 +1836,7 @@ window.addEventListener('blur', () => {
   const list = document.getElementById('taskList');
 
   list.addEventListener('dragstart', (e) => {
+    if (isReadOnlyTab()) { e.preventDefault(); return; }
     const taskEl = e.target.closest('.task-item');
     const secEl  = e.target.closest('.section-header');
     if (taskEl) {
@@ -1835,6 +2048,8 @@ function autoSaveMd() {
 }
 
 document.getElementById('clearDoneBtn').addEventListener('click', () => {
+  // На notes.md и read-only legacy «очистить» только закрывает вкладку.
+  if (isServerTab() || isLegacyLockedTab()) { closeTab(activeTabId); return; }
   const activeTab     = getActiveTab();
   const activeTitle   = activeTab?.title;
   const tabAutoSave   = !!activeTab?.autoSave;
@@ -1905,6 +2120,89 @@ document.getElementById('updateBannerClose').addEventListener('click', (e) => {
 
   new ResizeObserver(updateTabOverflow).observe(strip);
 })();
+
+/* ── Bridge for popup-api.js ── */
+function resetViewState() {
+  resetCollapsedState();
+  editingId = null; renamingSection = null; moveMenuTaskId = null;
+  selectedSection = null; allCollapsed = false; updateCollapseBtn();
+}
+
+function activateTab(tab) {
+  const current = getActiveTab();
+  if (current && current !== tab) { current.tasks = tasks; current.sections = sections; }
+  activeTabId = tab.id;
+  tasks    = tab.tasks;
+  sections = tab.sections || deriveSections(tab.tasks);
+  applyTitle(tab.title);
+  applyAutoSaveButton(tab);
+  resetViewState();
+  saveAllTabs(); renderTabs(); render();
+}
+
+function sidepadAttachServer(backend, serverTab, { focus = false, show = true } = {}) {
+  serverBackend = backend;
+  let tab = tabs.find(t => isServerTab(t));
+  if (!tab && show) {
+    tab = { ...serverTab, tasks: [], sections: [] };
+    tabs.push(tab);
+    const emptyDefault = tabs.findIndex(t => t.title === 'default' && !t.tasks.length && !(t.sections || []).length && t !== tab);
+    if (emptyDefault !== -1 && tabs[emptyDefault].id !== activeTabId) tabs.splice(emptyDefault, 1);
+  }
+  if (tab && focus) activateTab(tab);
+  else { saveAllTabs(); renderTabs(); render(); }
+}
+
+function sidepadDetachServer() {
+  serverBackend = null;
+  const idx = tabs.findIndex(t => isServerTab(t));
+  if (idx !== -1) {
+    const wasActive = tabs[idx].id === activeTabId;
+    tabs.splice(idx, 1);
+    if (wasActive) {
+      if (tabs.length) activateTab(tabs[Math.min(idx, tabs.length - 1)]);
+      else switchToOrCreateDefault();
+      return;
+    }
+  }
+  saveAllTabs(); renderTabs(); render();
+}
+
+function sidepadApplyServerTab(model, { remote = false } = {}) {
+  const tab = tabs.find(t => isServerTab(t));
+  if (!tab) return;
+  tab.tasks = model.tasks;
+  tab.sections = model.sections;
+  if (tab.id === activeTabId) {
+    tasks = tab.tasks;
+    sections = tab.sections;
+    if (remote) resetCollapsedState();
+    else syncAutoCollapse();
+  }
+  render();
+}
+
+function sidepadServerTabId() {
+  return tabs.find(t => isServerTab(t))?.id || null;
+}
+
+function sidepadFileTabs() {
+  return tabs.filter(t => !isServerTab(t)).map(t => ({ id: t.id, title: t.title }));
+}
+
+function sidepadSwitchTab(id) {
+  const tab = tabs.find(t => t.id === id);
+  if (tab && id !== activeTabId) switchTab(id);
+}
+
+function sidepadCloseTab(id) {
+  closeTab(id);
+}
+
+function sidepadRender() {
+  renderTabs();
+  render();
+}
 
 /* ── Init ── */
 loadAll();

@@ -2,7 +2,7 @@
 // временном профиле с --remote-debugging-pipe, расширение грузится через
 // Extensions.loadUnpacked (Chrome stable больше не принимает --load-extension).
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +29,21 @@ export function browserExecutable() {
   const configured = process.env.SIDEPAD_BROWSER;
   if (configured) return existsSync(configured) ? configured : null;
   return playwrightChromium();
+}
+
+// Копия расширения для API-сценариев: host-доступ к notes.lab выдан заранее,
+// потому что диалог chrome.permissions.request в headless подтвердить нельзя.
+export function extensionCopyWithNotesAccess() {
+  const dir = mkdtempSync(path.join(process.env.TMPDIR || tmpdir(), 'sidepad-ext-'));
+  for (const entry of readdirSync(EXTENSION_ROOT)) {
+    if (['.git', 'tests', 'docs', '.claude'].includes(entry)) continue;
+    cpSync(path.join(EXTENSION_ROOT, entry), path.join(dir, entry), { recursive: true });
+  }
+  const manifestPath = path.join(dir, 'manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.host_permissions = ['https://notes.lab/*'];
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  return dir;
 }
 
 class CdpSession {
@@ -90,6 +105,8 @@ export class Browser {
     ], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] });
     child.stdio[2].resume();
     const browser = new Browser(child, userDataDir);
+    browser.onEvent('Target.targetCreated', ({ targetInfo }) => browser.createdTargets.push(targetInfo));
+    browser.onEvent('Target.targetInfoChanged', ({ targetInfo }) => browser.createdTargets.push(targetInfo));
     await browser.send('Target.setDiscoverTargets', { discover: true });
     if (extension) {
       const loaded = await browser.send('Extensions.loadUnpacked', { path: extension });
@@ -102,6 +119,7 @@ export class Browser {
     this.child = child;
     this.userDataDir = userDataDir;
     this.extensionId = null;
+    this.createdTargets = [];
     this.nextId = 1;
     this.pending = new Map();
     this.listeners = new Set();
@@ -164,7 +182,7 @@ export class Browser {
     return session;
   }
 
-  async open(url, { beforeLoad = null } = {}) {
+  async open(url, { beforeLoad = null, setup = null } = {}) {
     const { targetId } = await this.send('Target.createTarget', { url: 'about:blank' });
     const session = await this.attach(targetId);
     session.targetId = targetId;
@@ -173,6 +191,7 @@ export class Browser {
     if (beforeLoad) {
       await session.send('Page.addScriptToEvaluateOnNewDocument', { source: beforeLoad });
     }
+    if (setup) await setup(session);
     const loaded = new Promise((resolve) => {
       const off = session.on('Page.loadEventFired', () => { off(); resolve(); });
     });

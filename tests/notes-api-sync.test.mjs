@@ -41,7 +41,7 @@ test('polls immediately on start and then every interval while visible', async (
   assert.deepEqual(clock.pending().map((timer) => timer.delay), [POLL_INTERVAL_MS]);
 });
 
-test('hidden panel schedules nothing until it becomes visible again', async () => {
+test('hidden panel makes no requests, only cheap visibility rechecks, and resumes even without an event', async () => {
   const clock = fakeClock();
   let visible = false;
   let ticks = 0;
@@ -49,7 +49,22 @@ test('hidden panel schedules nothing until it becomes visible again', async () =
   poller.start();
   await flush();
   assert.equal(ticks, 0);
-  assert.equal(clock.pending().length, 0);
+  assert.deepEqual(clock.pending().map((timer) => timer.delay), [POLL_INTERVAL_MS]);
+  await clock.fire();
+  assert.equal(ticks, 0);
+  visible = true;
+  await clock.fire();
+  await flush();
+  assert.equal(ticks, 1);
+  assert.equal(clock.pending().length, 1);
+});
+
+test('visibility event wakes an immediate read', async () => {
+  const clock = fakeClock();
+  let visible = false;
+  let ticks = 0;
+  const poller = new VisiblePoller({ tick: async () => { ticks += 1; return 'ok'; }, isVisible: () => visible, ...clock });
+  poller.start();
   visible = true;
   poller.wake();
   await flush();
@@ -127,4 +142,22 @@ test('a throwing tick counts as a failure instead of breaking the loop', async (
   poller.start();
   await flush();
   assert.deepEqual(clock.pending().map((timer) => timer.delay), [4000]);
+});
+
+test('default timers are called unbound so browsers do not throw Illegal invocation', async () => {
+  const realSetTimeout = globalThis.setTimeout;
+  const scheduled = [];
+  globalThis.setTimeout = function strictSetTimeout(fn, delay) {
+    if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+    scheduled.push(delay);
+    return 1;
+  };
+  try {
+    const poller = new VisiblePoller({ tick: async () => 'ok', isVisible: () => true });
+    poller.start();
+    await flush();
+    assert.deepEqual(scheduled, [POLL_INTERVAL_MS]);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
 });
