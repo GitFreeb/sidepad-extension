@@ -224,6 +224,10 @@ const poller = new VisiblePoller({
   isVisible: () => document.visibilityState === 'visible',
   async tick() {
     if (ui.deferredApply) applySnapshot();
+    if (ui.pending) {
+      await refreshPending();
+      if (!ui.pending) renderChrome();
+    }
     if (!mode.enabled || authPhase() !== 'current' || ui.pumping || sidepadServerBusy()) return 'ok';
     await mode.refresh({ quiet: true });
     return mode.state.phase === 'offline-read-only' ? 'backoff' : 'ok';

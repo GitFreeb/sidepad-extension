@@ -1159,7 +1159,7 @@ document.getElementById('exportBtn').addEventListener('click', async () => {
     if (lastFileHandle) opts.startIn = lastFileHandle;
     const handle = await window.showSaveFilePicker(opts);
     lastFileHandle = handle;
-    await setStoredHandle(activeTabId, handle);
+    if (!isServerTab()) await setStoredHandle(activeTabId, handle);
     const writable = await handle.createWritable();
     await writable.write(generateMd());
     await writable.close();
