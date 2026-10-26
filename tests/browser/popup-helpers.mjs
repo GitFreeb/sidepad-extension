@@ -52,7 +52,7 @@ export const PAGE_HELPERS = `
     model() {
       const out = [];
       let current = null;
-      document.querySelectorAll('#taskList > li').forEach((li) => {
+      document.querySelectorAll('#taskList .section-header, #taskList .task-item').forEach((li) => {
         if (li.classList.contains('section-header')) {
           current = { name: li.dataset.section, collapsed: li.classList.contains('collapsed'), tasks: [] };
           out.push(current);

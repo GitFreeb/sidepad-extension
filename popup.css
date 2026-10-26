@@ -770,6 +770,17 @@ body {
 .task-list::-webkit-scrollbar { width: 3px; }
 .task-list::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
 
+/* Section groups: границы, в которых липнет плашка секции */
+.section-group,
+.section-body {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Без схлопывания margin плашки сквозь обёртку: её верх — точка отсчёта прокрутки */
+.section-group { display: flow-root; }
+
 /* Section headers */
 .section-header {
   display: flex;

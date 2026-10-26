@@ -245,3 +245,51 @@ test('file tabs keep a section named «Неразобранные» in place and
   await page.evaluate(`__t.type('.section-rename-input', 'Renamed')`);
   assert.deepEqual((await model()).map((s) => s.name), ['First', 'Renamed']);
 });
+
+test('sticky section headers never pile up or cover their first task after scrolling and expanding', { skip }, async () => {
+  const sections = Array.from({ length: 8 }, (_, s) => [`S${s}`, Array.from({ length: 6 }, (_, t) => `task ${s}.${t}`)]);
+  await reloadWithStorage(page, { tabs: [legacyTab('tab_long', 'long', sections)], activeTabId: 'tab_long' });
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 640, deviceScaleFactor: 1, mobile: false });
+  const overlaps = () => page.evaluate(`(() => {
+    const list = document.getElementById('taskList');
+    const top = list.getBoundingClientRect().top;
+    const headers = [...list.querySelectorAll('.section-header')].map((h) => h.getBoundingClientRect())
+      .filter((r) => r.bottom > top && r.height > 0);
+    let pile = 0;
+    for (let i = 0; i < headers.length; i += 1) {
+      for (let j = i + 1; j < headers.length; j += 1) {
+        if (headers[i].top < headers[j].bottom - 1 && headers[j].top < headers[i].bottom - 1) pile += 1;
+      }
+    }
+    const covered = [...list.querySelectorAll('.section-header')].filter((h) => {
+      const r = h.getBoundingClientRect();
+      const first = h.parentElement.querySelector('.task-item') && [...list.querySelectorAll('.task-item')]
+        .find((li) => li.querySelector('.task-text')?.textContent === 'task ' + h.dataset.section.slice(1) + '.0');
+      if (!first || r.bottom <= top) return false;
+      const f = first.getBoundingClientRect();
+      // Первая задача видна сразу под плашкой: не под ней и не выше края списка.
+      return f.top < r.bottom - 1;
+    }).length;
+    return { pile, covered };
+  })()`);
+  for (const ratio of [0.35, 0.7, 1]) {
+    await page.evaluate(`(() => { const l = document.getElementById('taskList'); l.scrollTop = (l.scrollHeight - l.clientHeight) * ${ratio}; })()`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal((await overlaps()).pile, 0, `headers pile up at scroll ${ratio}`);
+  }
+  for (let i = 0; i < 3; i += 1) {
+    // Прокрутка внутрь секции: её плашка уже прилипла к верху списка.
+    await page.evaluate(`(() => {
+      const l = document.getElementById('taskList');
+      const group = __t.section('S5').parentElement;
+      l.scrollTop += group.getBoundingClientRect().top - l.getBoundingClientRect().top + 60;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await page.evaluate(`__t.section('S5').click()`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await page.evaluate(`__t.section('S5').click()`);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    assert.deepEqual(await overlaps(), { pile: 0, covered: 0 }, `after collapse/expand #${i + 1}`);
+  }
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});
