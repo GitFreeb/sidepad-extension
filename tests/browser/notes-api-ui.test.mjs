@@ -351,6 +351,28 @@ test('long voice tasks can be edited by typing beyond the old 240 character limi
   await page.evaluate(`document.getElementById('taskInput').value = ''`);
 });
 
+test('editing survives leaving the panel to copy text, then pasting a full replacement', { skip }, async () => {
+  await settle();
+  await page.evaluate(`__t.task('short voice').querySelector('.task-text').click()`);
+  await page.waitFor(`document.querySelector('.task-edit-input') === document.activeElement`);
+
+  // Пользователь уходит в другую вкладку браузера за текстом для вставки.
+  const other = await browser.open('about:blank');
+  await browser.send('Target.activateTarget', { targetId: other.targetId });
+  await page.waitFor(`!document.hasFocus()`);
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  assert.ok(await page.evaluate(`document.querySelector('.task-edit-input') !== null`), 'edit input must stay open while the panel is not focused');
+
+  await browser.closeTarget(other);
+  await browser.send('Target.activateTarget', { targetId: page.targetId });
+  await page.waitFor(`document.hasFocus()`);
+  await page.evaluate(`(() => { const input = document.querySelector('.task-edit-input'); input.focus(); input.select(); })()`);
+  await page.send('Input.insertText', { text: 'pasted replacement' });
+  await page.evaluate(`__t.key('.task-edit-input', 'Enter')`);
+  await page.waitFor(`__t.task('pasted replacement') !== undefined`);
+  assert.equal(op().task.text, 'pasted replacement');
+});
+
 test('✕ clear on notes.md only closes the local tab after confirmation and sends no mutation', { skip }, async () => {
   await settle();
   const count = fake.mutations().length;

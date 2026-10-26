@@ -1418,6 +1418,9 @@ function render() {
     const isRenaming  = renamingSection === title;
     const pinned      = isPinnedSection(title);
 
+    // Своя обёртка у каждой секции ограничивает липкую плашку её секцией:
+    // следующая плашка вытесняет предыдущую, а не ложится на неё стопкой.
+    html += `<li class="section-group"><ul class="section-body">`;
     html += `<li class="section-header${isCollapsed ? ' collapsed' : ''}${pinned ? ' inbox' : ''}" data-section="${escapeHtml(title)}" data-action="toggle-section" draggable="${isRenaming || readOnly || pinned ? 'false' : 'true'}">
       ${isRenaming
         ? `<input class="section-rename-input" data-rename-section="${escapeHtml(title)}" value="${escapeHtml(title)}" maxlength="${isServerTab() ? SERVER_SECTION_MAX : 80}" draggable="false">`
@@ -1465,6 +1468,7 @@ function render() {
         </li>`;
       });
     }
+    html += `</ul></li>`;
   });
 
   list.innerHTML = html;
@@ -1494,7 +1498,14 @@ function render() {
     justExpandedSection = null;
     for (const h of list.querySelectorAll('.section-header')) {
       if (h.dataset.section === sec) {
-        h.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        // scrollIntoView считает прилипшую плашку уже «на месте» и не
+        // прокручивает, оставляя первые задачи скрытыми под ней. Прокручиваем
+        // по обёртке секции так, чтобы плашка встала ровно в липкую позицию.
+        const group     = h.closest('.section-group');
+        const stickyTop = parseFloat(getComputedStyle(list).paddingTop) + parseFloat(getComputedStyle(h).top);
+        const offset    = group.getBoundingClientRect().top - list.getBoundingClientRect().top
+                        + parseFloat(getComputedStyle(h).marginTop) - stickyTop;
+        list.scrollTo({ top: list.scrollTop + offset, behavior: 'smooth' });
         break;
       }
     }
@@ -1654,6 +1665,10 @@ document.getElementById('taskList').addEventListener('keydown', (e) => {
 });
 
 document.getElementById('taskList').addEventListener('focusout', (e) => {
+  // На notes.md уход из панели (например, за текстом для вставки в другую
+  // вкладку) не завершает правку: фокус вернётся в то же поле. Опрос сервера
+  // в это время не перерисовывает список (sidepadServerBusy).
+  if (isServerTab() && !document.hasFocus()) return;
   if (e.target.classList.contains('section-rename-input') && renamingSection !== null) {
     finishSectionRename(e.target);
     return;
