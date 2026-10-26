@@ -352,6 +352,23 @@ test('no credential or pairing code leaks into DOM, sync/session storage, tabs o
   assert.equal(consoleLines.some((line) => /syn-[0-9a-f-]{13}/.test(line)), false);
 });
 
+test('a revoked host permission drops the stale notes.md tab instead of leaving a dead tab', { skip }, async () => {
+  const stored = await page.evaluate(`__t.storage(null)`);
+  await page.evaluate(`(() => {
+    const realContains = chrome.permissions.contains.bind(chrome.permissions);
+    chrome.permissions.contains = (permission, callback) => callback(false);
+    window.__restoreContains = () => { chrome.permissions.contains = realContains; };
+  })()`);
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: 'chrome.permissions.contains = (p, cb) => cb(false);' }).then(({ identifier }) => { page.revokedScript = identifier; });
+  await reload(page);
+  await page.waitFor(`!__t.tabs().some((name) => name.includes('notes.md'))`);
+  assert.equal(await page.evaluate(`document.getElementById('apiModeToggle').checked`), false);
+  await page.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: page.revokedScript });
+  await reloadWithStorage(page, stored);
+  await page.waitFor(`__t.tabs().some((name) => name.includes('notes.md'))`);
+  await settle();
+});
+
 test('switching Notes API off restores the plain legacy UI and stops talking to the server', { skip }, async () => {
   await page.evaluate(`chrome.permissions.remove = (permission, callback) => callback(true)`);
   await page.evaluate(`__t.click('#apiModeToggle')`);

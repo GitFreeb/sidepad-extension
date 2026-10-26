@@ -535,6 +535,9 @@ sidepadReady
   .then(() => mode.init())
   .then(async () => {
     if (mode.enabled) await activate({ focus: false });
+    // Режим мог выключиться при старте (например, доступ к notes.lab отозван
+    // в браузере): сохранённая вкладка notes.md без backend была бы мёртвой.
+    else if (sidepadServerTabId()) await deactivate();
     else renderChrome();
   })
   .catch(showLocalError);
