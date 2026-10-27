@@ -20,7 +20,8 @@ export class StaleIntentError extends Error {
 // Markdown store Notes Lab отклоняет в тексте задачи табуляцию, переводы
 // строк, управляющие символы, двойные пробелы и ссылки (у ссылки своё поле).
 // Вставленный текст приводится к этим правилам, иначе сервер вернёт 400 и
-// правка молча откатится к прежнему тексту.
+// правка молча откатится к прежнему тексту. Правила и эталон нормализации —
+// notes-lab docs/contracts/markdown-store.md; web normalizeTaskInput обязан совпадать.
 const URL_IN_TEXT = /https?:\/\/[^\s<>"{}|\\^`[\]]+/i;
 
 function collapseWhitespace(value) {
