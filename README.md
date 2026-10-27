@@ -352,7 +352,7 @@ Connecting the empty `default` tab to an existing file automatically renames it 
 
 ## Experimental Notes API Mode
 
-The **Notes API** switch changes only where tasks are stored: a regular `notes.md` tab appears and lives in Notes Lab instead of a file. The interface is the same — checkboxes, drag and drop, inline edit, sections, `→` move, import and export. The server owns task order: a new task goes to the top of its section, a finished task moves to the end, a reopened task returns to the top. File tabs and `↓auto` keep working as before.
+The **Notes API** switch changes only where tasks are stored: a regular `notes.md` tab appears and lives in Notes Lab instead of a file. The interface is the same — checkboxes, drag and drop, inline edit, sections, `→` move, import and export. The server owns task order (a new task goes to the top of its section, a finished one to the end). File tabs and `↓auto` keep working as before.
 
 The mode is off by default. While it is off, Sidepad does not request the optional `https://notes.lab/*` permission and sends no Notes API requests.
 
@@ -371,9 +371,9 @@ On the first connection Sidepad asks which tab holds the old list (`dop.md` is s
 ### Sync and revision safety
 
 - `notes.md` is read on open, on focus and every 2 seconds via `ETag`/`304`, only while the panel is visible. Offline, `429` and `503` use bounded backoff.
-- Every action is one semantic operation with `expected_revision` and a stable `operation_id`; a full Markdown document is never sent.
-- Refs are valid only in their revision and are resolved again after every response.
-- A `409` conflict rereads the document without replaying the operation. A lost response requires an explicit “retry” with the same `operation_id`.
+- The protocol — revisions, semantic operations, `operation_id`, refs, task order and error codes — is defined by the Notes Lab contract: [HTTP API](https://github.com/GitFreeb/notes-lab/blob/main/docs/contracts/http-api.md). Sidepad does not redefine it; if they disagree, the contract wins.
+- A revision conflict rereads the document without replaying the operation. A lost response requires an explicit “retry”.
+- Task text is normalized on save to the [Markdown store rules](https://github.com/GitFreeb/notes-lab/blob/main/docs/contracts/markdown-store.md#текст-задачи-url-и-имя-секции): whitespace and line breaks collapse, a link in the text moves to the URL field.
 - Offline shows the last confirmed snapshot read-only — no queue, no automatic replay.
 - The «Неразобранные» section (the Whisper import inbox) is pinned on top of `notes.md` and highlighted, as in Notes Lab web; the document order itself is unchanged. The section cannot be renamed, deleted or dragged, because the import looks it up by its exact name. Its tasks are edited as usual, long voice notes included: the text limit is 10,000 characters, as in web.
 - **✕ clear** on `notes.md` only closes the local tab; the tasks stay on the server. Bring it back with “open notes.md”.
