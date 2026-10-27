@@ -21,6 +21,8 @@ function savedSession(state) {
   };
 }
 
+const OFFLINE_AFTER_QUIET_FAILURES = 2;
+
 export class NotesApiMode {
   constructor({ storage, permissions, clientFactory, originPermission, auth = null, now = () => new Date().toISOString() }) {
     this.storage = storage;
@@ -40,6 +42,9 @@ export class NotesApiMode {
     // Растёт при каждой отправке мутации: чтение, начатое раньше записи,
     // не должно перезаписать более новый результат этой записи.
     this.writeSeq = 0;
+    // Один сбой фонового опроса — ещё не офлайн: при коротком обрыве сети
+    // вкладка иначе мигает между «офлайн» и «✓».
+    this.quietFailures = 0;
   }
 
   subscribe(listener) {
@@ -166,6 +171,7 @@ export class NotesApiMode {
       const result = await client.load({ etag: this.state.confirmed?.etag });
       if (this.epoch !== epoch) return false;
       if (this.writeSeq !== writeSeq) return false;
+      this.quietFailures = 0;
       if (result.notModified) {
         this.state = reduceApiState(this.state, {
           type: 'LOAD_NOT_MODIFIED',
@@ -190,6 +196,9 @@ export class NotesApiMode {
         await this.rejectAuth(error.status);
         this.state = reduceApiState(this.state, { type: 'AUTH_REQUIRED' });
       } else if (error instanceof OfflineError) {
+        this.quietFailures = quiet ? this.quietFailures + 1 : 0;
+        if (quiet && this.state.phase === 'current' && this.quietFailures < OFFLINE_AFTER_QUIET_FAILURES) return false;
+        this.quietFailures = 0;
         this.state = reduceApiState(this.state, { type: 'LOAD_OFFLINE' });
       } else {
         throw error;

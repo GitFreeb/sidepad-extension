@@ -282,10 +282,14 @@ test('a lost response keeps the stable operation id and requires an explicit ret
 
 test('offline shows the last snapshot read-only with bounded polling, then recovers', { skip }, async () => {
   await settle();
+  const firstTaskTop = `__t.task('first').getBoundingClientRect().top`;
+  const before = await page.evaluate(firstTaskTop);
   fake.offline = true;
   const start = fake.log.length;
-  await page.waitFor(`document.getElementById('syncState').dataset.kind === 'offline'`, { timeout: 6000 });
+  await page.waitFor(`document.getElementById('syncState').dataset.kind === 'offline'`, { timeout: 8000 });
   assert.equal(await page.evaluate(`document.getElementById('syncState').textContent`), 'офлайн');
+  assert.equal(await page.evaluate(`document.getElementById('serverNotice').hidden`), true);
+  assert.equal(await page.evaluate(firstTaskTop), before);
   assert.equal(await page.evaluate(`document.getElementById('legacyMode').classList.contains('readonly')`), true);
   assert.equal(await page.evaluate(`__t.task('first').querySelector('.task-checkbox').disabled`), true);
   await new Promise((resolve) => setTimeout(resolve, 6000));

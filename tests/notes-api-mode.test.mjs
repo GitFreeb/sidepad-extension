@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { NotesApiMode, API_MODE_STORAGE_KEY, API_SESSION_STORAGE_KEY } from '../notes-api-mode.js';
-import { AuthRequiredError } from '../notes-api-client.js';
+import { AuthRequiredError, OfflineError } from '../notes-api-client.js';
 
 function createStorage(initial = {}) {
   const data = new Map(Object.entries(initial));
@@ -504,6 +504,39 @@ test('quiet background refresh keeps the tab writable instead of flashing a load
   await pending;
   assert.equal(phases.includes('loading'), false);
   assert.equal(mode.state.confirmed.revision, 'rev-1');
+});
+
+test('one failed background poll keeps the tab current; the second one switches to offline', async () => {
+  let loads = 0;
+  const client = {
+    load() {
+      loads += 1;
+      if (loads === 1 || loads === 4) return Promise.resolve({ document: { sections: [] }, revision: 'rev-1', etag: '"rev-1"' });
+      return Promise.reject(new OfflineError());
+    },
+  };
+  const mode = currentMode({ client });
+  await mode.enable();
+  await mode.refresh({ quiet: true });
+  assert.equal(mode.state.phase, 'current');
+  await mode.refresh({ quiet: true });
+  assert.equal(mode.state.phase, 'offline-read-only');
+  await mode.refresh({ quiet: true });
+  assert.equal(mode.state.phase, 'current');
+});
+
+test('an explicit refresh that fails switches to offline at once', async () => {
+  let loads = 0;
+  const client = {
+    load() {
+      loads += 1;
+      return loads === 1 ? Promise.resolve({ document: { sections: [] }, revision: 'rev-1' }) : Promise.reject(new OfflineError());
+    },
+  };
+  const mode = currentMode({ client });
+  await mode.enable();
+  await mode.refresh();
+  assert.equal(mode.state.phase, 'offline-read-only');
 });
 
 test('a read that started before a write cannot overwrite the newer write result', async () => {

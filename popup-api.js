@@ -272,7 +272,6 @@ function noticeFor(tabIsServer) {
     return { key, actions: [['actionConnect', () => startConnect()]] };
   }
   if (kind === 'Retry') return { key: 'noticeAmbiguous', actions: [['actionRetry', () => retryAmbiguous()]] };
-  if (kind === 'Offline') return { key: 'noticeOffline', actions: [] };
   if (ui.notice) return { key: ui.notice, actions: [] };
   return null;
 }
