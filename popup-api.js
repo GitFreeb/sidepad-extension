@@ -96,6 +96,8 @@ const ui = {
   deferredApply: false,
   queue: [],
   pumping: false,
+  retrying: false,
+  ambiguousTaskCreate: null,
 };
 
 /* ── Backend registered in popup.js ── */
@@ -121,7 +123,10 @@ const backend = {
       notify('noticeStale');
       return;
     }
-    ui.queue.push(captured);
+    ui.queue.push({
+      intent: captured,
+      selectionAtSubmit: intent.selectionAtSubmit,
+    });
     pump().catch(showLocalError);
   },
   notify,
@@ -163,7 +168,8 @@ async function pump() {
         ui.queue = [];
         break;
       }
-      const intent = ui.queue.shift();
+      const queued = ui.queue.shift();
+      const { intent } = queued;
       let operation;
       try {
         // Refs действуют только в своей ревизии: разрешаем намерение против
@@ -177,8 +183,19 @@ async function pump() {
         break;
       }
       if (!operation) continue;
-      await mode.submit(operation);
+      const succeeded = await mode.submit(operation);
+      if (succeeded && intent.kind === 'task.create') {
+        ui.ambiguousTaskCreate = null;
+        sidepadConfirmActiveTaskCreate(intent.sectionName, queued.selectionAtSubmit);
+      } else if (mode.state.conflictReason === 'ambiguous' && intent.kind === 'task.create') {
+        ui.ambiguousTaskCreate = {
+          operationId: mode.state.pendingMutation?.operationId || null,
+          sectionName: intent.sectionName,
+          selectionAtSubmit: queued.selectionAtSubmit,
+        };
+      }
       if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
+        ui.ambiguousTaskCreate = null;
         ui.queue = [];
         notify(mode.state.conflictReason === 'rejected' ? 'noticeRejected' : 'noticeConflict');
         // Конфликт: перечитать документ без повтора операции.
@@ -206,7 +223,7 @@ function applySnapshot({ force = false } = {}) {
     ui.deferredApply = true;
     return;
   }
-  const remote = ui.appliedRevision !== null && !ui.pumping;
+  const remote = ui.appliedRevision !== null && !ui.pumping && !ui.retrying;
   ui.appliedRevision = snapshot.revision;
   ui.deferredApply = false;
   sidepadApplyServerTab(documentToTab(snapshot.document), { remote });
@@ -425,10 +442,34 @@ async function refreshPending() {
 }
 
 async function retryAmbiguous() {
-  await mode.retryAmbiguous();
-  if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
-    notify(mode.state.conflictReason === 'rejected' ? 'noticeRejected' : 'noticeConflict');
-    await mode.refresh({ quiet: true });
+  const pending = mode.state.pendingMutation;
+  const remembered = ui.ambiguousTaskCreate?.operationId === pending?.operationId
+    ? ui.ambiguousTaskCreate
+    : null;
+  let sectionName = remembered?.sectionName || null;
+  if (!sectionName && pending?.operation?.type === 'task.create') {
+    sectionName = mode.state.confirmed?.document?.sections
+      ?.find((section) => section.ref === pending.operation.section_ref)?.name || null;
+  }
+  if (!sectionName && pending?.operation?.type === 'section.create' && pending.operation.task) {
+    sectionName = pending.operation.section?.name || null;
+  }
+  const selectionAtSubmit = remembered?.selectionAtSubmit ?? null;
+
+  ui.retrying = true;
+  try {
+    const succeeded = await mode.retryAmbiguous();
+    if (succeeded && sectionName) {
+      sidepadConfirmActiveTaskCreate(sectionName, selectionAtSubmit);
+      ui.ambiguousTaskCreate = null;
+    }
+    if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
+      ui.ambiguousTaskCreate = null;
+      notify(mode.state.conflictReason === 'rejected' ? 'noticeRejected' : 'noticeConflict');
+      await mode.refresh({ quiet: true });
+    }
+  } finally {
+    ui.retrying = false;
   }
 }
 
@@ -469,6 +510,8 @@ async function deactivate() {
   ui.notice = null;
   ui.appliedRevision = null;
   ui.pending = false;
+  ui.retrying = false;
+  ui.ambiguousTaskCreate = null;
   await cancelConnectAttempt(localStore).catch(() => {});
   await localStore.remove([SERVER_TAB_CLOSED_KEY]).catch(() => {});
   backend.legacyTabId = null;
