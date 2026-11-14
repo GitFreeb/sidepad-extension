@@ -1284,6 +1284,22 @@ function syncAutoCollapse() {
   });
 }
 
+// Быстрый ввод хранит последнюю успешно использованную секцию и раскрывает
+// только её. Для notes.md этот hook вызывается popup-api.js после
+// подтверждённого server response; rejection/conflict/ambiguous его не
+// вызывают. selectionAtSubmit не даёт позднему ответу затереть более новый
+// выбор пользователя.
+function sidepadConfirmActiveTaskCreate(section, selectionAtSubmit) {
+  if (!sections.includes(section) && !tasks.some(task => task.section === section)) return;
+  if (selectedSection === selectionAtSubmit) setSection(section);
+  collapsedSections.delete(section);
+  if (allCollapsed) {
+    allCollapsed = false;
+    updateCollapseBtn();
+  }
+  render();
+}
+
 /* ── Toast ── */
 let toastTimer = null;
 function showToast(anchorEl) {
@@ -1741,30 +1757,29 @@ document.getElementById('sectionInput').addEventListener('keydown', e => {
 function addTask() {
   const textEl = document.getElementById('taskInput');
   const linkEl = document.getElementById('linkInput');
+  const sectionEl = document.getElementById('sectionInput');
   const text   = textEl.value.trim();
   if (!text) return;
   if (isReadOnlyTab()) return;
 
-  let section = selectedSection;
+  const selectionAtSubmit = selectedSection;
+  const namedSection = sectionEl.value.trim();
+  // Явно введённая новая секция сильнее sticky-выбора; иначе после первого
+  // успешного add сценарий «секция + задача» стал бы недоступен.
+  let section = namedSection || selectedSection;
   if (!section) {
-    const namedSection = document.getElementById('sectionInput').value.trim();
-    if (namedSection) {
-      section = namedSection;
-      document.getElementById('sectionInput').value = '';
-    } else {
-      section = getNextSectionName(sections);
-    }
+    section = getNextSectionName(sections);
   }
+  if (namedSection) sectionEl.value = '';
   if (isServerTab()) {
     // Новая секция появится в sections только из ответа сервера.
-    routeIntent({ kind: 'task.create', sectionName: section, text, url: linkEl.value.trim() });
+    routeIntent({ kind: 'task.create', sectionName: section, text, url: linkEl.value.trim(), selectionAtSubmit });
     textEl.value = '';
     linkEl.value = '';
-    setSection(null);
     textEl.focus();
     return;
   }
-  if (!selectedSection) {
+  if (namedSection || !selectedSection) {
     if (!sections.includes(section)) sections.unshift(section);
   } else if (!sections.includes(section)) {
     sections.push(section);
@@ -1776,11 +1791,10 @@ function addTask() {
 
   textEl.value = '';
   linkEl.value = '';
-  setSection(null);
   textEl.focus();
   syncAutoCollapse();
   saveTasks();
-  render();
+  sidepadConfirmActiveTaskCreate(section, selectionAtSubmit);
 }
 
 document.getElementById('addBtn').addEventListener('click', () => {

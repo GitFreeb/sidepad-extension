@@ -161,7 +161,7 @@ test('legacy choice is explicit: saving dop.md locks it read-only while other fi
   assert.deepEqual(await page.evaluate('__t.tabs()'), ['work.md', 'dop.md', '*notes.md']);
 });
 
-test('adding tasks and sections sends semantic operations and renders the server order', { skip }, async () => {
+test('successful task creation keeps its server target selected for rapid capture', { skip }, async () => {
   await settle();
   const before = fake.mutations().length;
   await page.evaluate(`(() => {
@@ -175,18 +175,55 @@ test('adding tasks and sections sends semantic operations and renders the server
   assert.deepEqual(op(), { type: 'task.create', section_ref: op().section_ref, task: { text: 'draft review', url: 'https://example.test/r' } });
   assert.deepEqual((await model())[1].tasks, ['[ ] draft review', '[ ] report']);
   assert.equal(await page.evaluate(`__t.task('draft review').querySelector('.task-link').textContent`), 'https://example.test/r');
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Work');
 
+  await page.evaluate(`__t.type('#taskInput', 'draft follow-up')`);
+  await page.waitFor(`__t.task('draft follow-up') !== undefined`);
+  assert.equal(op().type, 'task.create');
+  assert.deepEqual((await model())[1].tasks, ['[ ] draft follow-up', '[ ] draft review', '[ ] report']);
+
+  // Switching away resets the ephemeral selector without changing the
+  // confirmed server document, so the auto-named path remains independent.
+  await page.evaluate(`(() => { __t.tab('work.md').click(); __t.tab('notes.md').click(); })()`);
+  await settle();
   await page.evaluate(`__t.type('#taskInput', 'loose idea')`);
   await page.waitFor(`__t.section('Новая секция 1') !== undefined`);
   assert.equal(op().type, 'section.create');
   assert.deepEqual((await model())[0], { name: 'Новая секция 1', collapsed: false, tasks: ['[ ] loose idea'] });
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Новая секция 1');
+
+  await page.evaluate(`__t.type('#taskInput', 'loose follow-up')`);
+  await page.waitFor(`__t.task('loose follow-up') !== undefined`);
+  assert.deepEqual((await model())[0].tasks, ['[ ] loose follow-up', '[ ] loose idea']);
 
   await page.evaluate(`__t.type('#sectionInput', 'Someday')`);
   await page.waitFor(`__t.section('Someday') !== undefined`);
   assert.deepEqual(op(), { type: 'section.create', section: { name: 'Someday' }, index: 0 });
   assert.deepEqual(fake.markdownModel().map(([name]) => name), ['Someday', 'Новая секция 1', 'Inbox', 'Work']);
-  assert.equal(fake.mutations().length, before + 3);
+  assert.equal(fake.mutations().length, before + 5);
   assert.ok(fake.mutations().every((entry) => entry.authorized && !('document' in entry.body) && !('markdown' in entry.body)));
+});
+
+test('confirmed active task creation expands only its collapsed target', { skip }, async () => {
+  await settle();
+  const serverOrder = fake.markdownModel().map(([name]) => name);
+  await page.evaluate(`(() => {
+    __t.section('Inbox').click();
+    __t.section('Work').click();
+    __t.click('#sectionSelect');
+    [...document.querySelectorAll('#sectionSelectList .csel-item')].find((li) => li.dataset.value === 'Work')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#taskInput', 'visible after confirmation');
+  })()`);
+  await page.waitFor(`__t.task('visible after confirmation') !== undefined`);
+
+  const current = await model();
+  assert.equal(current.find((section) => section.name === 'Inbox').collapsed, true);
+  assert.equal(current.find((section) => section.name === 'Work').collapsed, false);
+  assert.deepEqual(fake.markdownModel().map(([name]) => name), serverOrder);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Work');
+
+  await page.evaluate(`__t.section('Inbox').click()`);
 });
 
 test('toggle, inline edit and delete map to task.toggle, task.update and task.delete', { skip }, async () => {
@@ -250,6 +287,37 @@ test('rename and delete section go through section.update and section.delete', {
   assert.deepEqual(op(), { type: 'section.delete', section_ref: op().section_ref, confirm: true });
 });
 
+test('rejected and revision-conflicted task creation never expands the target section', { skip }, async () => {
+  await settle();
+  await page.evaluate(`(() => {
+    __t.section('Work').click();
+    __t.click('#sectionSelect');
+    [...document.querySelectorAll('#sectionSelectList .csel-item')].find((li) => li.dataset.value === 'Work')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  })()`);
+
+  fake.failNext = { kind: 'status', status: 400, code: 'validation_error' };
+  await page.evaluate(`__t.type('#taskInput', 'rejected capture')`);
+  await page.waitFor(`document.getElementById('serverNoticeText').textContent.includes('Сервер отклонил')`);
+  await settle();
+  assert.equal((await model()).find((section) => section.name === 'Work').collapsed, true);
+  assert.equal(fake.markdownModel().find(([name]) => name === 'Work')[1].includes('[ ] rejected capture'), false);
+
+  fake.sections.find((section) => section.name === 'Work').tasks.unshift({ text: 'remote conflict marker', done: false, url: null });
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    [...document.querySelectorAll('#sectionSelectList .csel-item')].find((li) => li.dataset.value === 'Work')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#taskInput', 'conflicted capture');
+  })()`);
+  await page.waitFor(`document.getElementById('serverNoticeText').textContent.includes('Документ изменился')`);
+  await settle();
+  assert.equal((await model()).find((section) => section.name === 'Work').collapsed, true);
+  assert.equal(fake.markdownModel().find(([name]) => name === 'Work')[1].includes('[ ] conflicted capture'), false);
+  await page.evaluate(`__t.section('Work').click()`);
+  await new Promise((resolve) => setTimeout(resolve, 900));
+});
+
 test('a revision conflict rereads the document without replaying the operation', { skip }, async () => {
   await settle();
   fake.sections.find((section) => section.name === 'Work').tasks.unshift({ text: 'from another client', done: false, url: null });
@@ -280,23 +348,68 @@ test('a lost response keeps the stable operation id and requires an explicit ret
   assert.equal(await page.evaluate(`__t.task('second (edited)').classList.contains('done')`), true);
 });
 
+test('503 trash_recovery_blocked keeps task creation ambiguous until exact manual retry', { skip }, async () => {
+  await settle();
+  await page.evaluate(`(() => {
+    __t.section('Inbox').click();
+    __t.section('Work').click();
+    __t.click('#sectionSelect');
+    [...document.querySelectorAll('#sectionSelectList .csel-item')].find((li) => li.dataset.value === 'Work')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  })()`);
+  fake.failNext = { kind: 'status', status: 503, code: 'trash_recovery_blocked' };
+  await page.evaluate(`__t.type('#taskInput', 'blocked capture')`);
+  await page.waitFor(`document.getElementById('syncState').dataset.kind === 'retry'`);
+  const blocked = fake.mutations().at(-1).body;
+
+  const beforeRetry = await model();
+  assert.equal(beforeRetry.find((section) => section.name === 'Inbox').collapsed, true);
+  assert.equal(beforeRetry.find((section) => section.name === 'Work').collapsed, true);
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  assert.equal(fake.mutations().filter((entry) => entry.body.operation_id === blocked.operation_id).length, 1);
+
+  await page.evaluate(`[...document.querySelectorAll('.server-notice-btn')].find((button) => button.textContent === 'повторить').click()`);
+  await settle();
+  await page.waitFor(`__t.task('blocked capture') !== undefined`);
+  const attempts = fake.mutations().filter((entry) => entry.body.operation_id === blocked.operation_id);
+  assert.equal(attempts.length, 2);
+  assert.deepEqual(attempts[1].body, attempts[0].body);
+
+  const afterRetry = await model();
+  assert.equal(afterRetry.find((section) => section.name === 'Inbox').collapsed, true);
+  assert.equal(afterRetry.find((section) => section.name === 'Work').collapsed, false);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Work');
+  await page.evaluate(`__t.section('Inbox').click()`);
+  await new Promise((resolve) => setTimeout(resolve, 900));
+});
+
 test('offline shows the last snapshot read-only with bounded polling, then recovers', { skip }, async () => {
   await settle();
+  await page.evaluate(`__t.section('Work').click()`);
+  await new Promise((resolve) => setTimeout(resolve, 100));
   const firstTaskTop = `__t.task('first').getBoundingClientRect().top`;
   const before = await page.evaluate(firstTaskTop);
   fake.offline = true;
-  const start = fake.log.length;
-  await page.waitFor(`document.getElementById('syncState').dataset.kind === 'offline'`, { timeout: 8000 });
-  assert.equal(await page.evaluate(`document.getElementById('syncState').textContent`), 'офлайн');
-  assert.equal(await page.evaluate(`document.getElementById('serverNotice').hidden`), true);
-  assert.equal(await page.evaluate(firstTaskTop), before);
-  assert.equal(await page.evaluate(`document.getElementById('legacyMode').classList.contains('readonly')`), true);
-  assert.equal(await page.evaluate(`__t.task('first').querySelector('.task-checkbox').disabled`), true);
-  await new Promise((resolve) => setTimeout(resolve, 6000));
-  assert.ok(fake.log.length - start <= 4, `backoff keeps requests rare: ${fake.log.length - start}`);
-  fake.offline = false;
-  await page.evaluate(`window.dispatchEvent(new Event('focus'))`);
-  await settle();
+  try {
+    const start = fake.log.length;
+    await page.waitFor(`document.getElementById('syncState').dataset.kind === 'offline'`, { timeout: 8000 });
+    assert.equal(await page.evaluate(`document.getElementById('syncState').textContent`), 'офлайн');
+    assert.equal(await page.evaluate(`document.getElementById('serverNotice').hidden`), true);
+    assert.equal(await page.evaluate(firstTaskTop), before);
+    assert.equal(await page.evaluate(`document.getElementById('legacyMode').classList.contains('readonly')`), true);
+    assert.equal(await page.evaluate(`__t.task('first').querySelector('.task-checkbox').disabled`), true);
+    const mutationCount = fake.mutations().length;
+    await page.evaluate(`__t.type('#taskInput', 'must not send offline')`);
+    assert.equal(fake.mutations().length, mutationCount);
+    assert.equal((await model()).find((section) => section.name === 'Work').collapsed, true);
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+    assert.ok(fake.log.length - start <= 4, `backoff keeps requests rare: ${fake.log.length - start}`);
+  } finally {
+    fake.offline = false;
+    await page.evaluate(`window.dispatchEvent(new Event('focus'))`);
+    await settle();
+    await page.evaluate(`document.getElementById('taskInput').value = ''`);
+  }
   assert.equal(await page.evaluate(`document.getElementById('legacyMode').classList.contains('readonly')`), false);
 });
 

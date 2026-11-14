@@ -155,6 +155,64 @@ test('manual retry after a lost mutation response reuses the operation ID', asyn
   assert.deepEqual(requests[1].body, requests[0].body);
 });
 
+for (const operation of [
+  { type: 'task.delete', task_ref: 'task-1' },
+  { type: 'section.delete', section_ref: 'section-1', confirm: true },
+]) {
+  test(`successful ${operation.type} accepts optional trash metadata`, async () => {
+    const client = new RevisionedNotesClient({
+      operationIdFactory: () => `op-${operation.type}`,
+      transport: {
+        request: async () => jsonResponse({
+          document: documentV1,
+          revision: 'rev-2',
+          trash: { ref: 'trash-item', expires_at: '2026-12-01T00:00:00Z' },
+        }),
+      },
+    });
+
+    const result = await client.mutate({ expectedRevision: 'rev-1', operation });
+
+    assert.equal(result.revision, 'rev-2');
+    assert.deepEqual(result.document, documentV1);
+  });
+}
+
+test('503 trash_recovery_blocked stays ambiguous and retries only the exact original envelope', async () => {
+  const requests = [];
+  const client = new RevisionedNotesClient({
+    operationIdFactory: () => 'op-trash-recovery',
+    transport: {
+      request: async (request) => {
+        requests.push(request);
+        if (requests.length === 1) {
+          return jsonResponse({ error: { code: 'trash_recovery_blocked' } }, 503);
+        }
+        return jsonResponse({ document: documentV1, revision: 'rev-2' });
+      },
+    },
+  });
+
+  let ambiguous;
+  try {
+    await client.mutate({
+      expectedRevision: 'rev-1',
+      operation: { type: 'task.delete', task_ref: 'task-1' },
+    });
+  } catch (error) {
+    ambiguous = error;
+  }
+
+  assert.ok(ambiguous instanceof AmbiguousMutationError);
+  assert.equal(ambiguous.mutation.operationId, 'op-trash-recovery');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(requests.length, 1, 'nothing is resent before an explicit retry');
+
+  await client.retry(ambiguous);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[1].body, requests[0].body);
+});
+
 test('a server error or malformed success after mutation is ambiguous', async () => {
   for (const response of [
     new Response(null, { status: 503 }),

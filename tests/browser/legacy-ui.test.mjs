@@ -54,7 +54,7 @@ test('renders sections, tasks and counter from the active file tab', { skip }, a
   assert.equal(await page.evaluate(`document.getElementById('apiModeToggle').checked`), false);
 });
 
-test('adds tasks to the top of the selected section, a new section, or an auto-named section', { skip }, async () => {
+test('keeps the successful target selected for rapid task capture', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.evaluate(`(() => {
     __t.click('#sectionSelect');
@@ -66,11 +66,23 @@ test('adds tasks to the top of the selected section, a new section, or an auto-n
   let current = await model();
   assert.deepEqual(current[1].tasks, ['[ ] fresh', '[ ] four']);
   assert.equal(await page.evaluate(`__t.task('fresh').querySelector('.task-link').textContent`), 'https://example.test/a');
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Beta');
 
+  await page.evaluate(`__t.type('#taskInput', 'second')`);
+  current = await model();
+  assert.deepEqual(current[1].tasks, ['[ ] second', '[ ] fresh', '[ ] four']);
+  assert.equal(current.some((section) => section.name === 'Новая секция 1'), false);
+
+  await reloadWithStorage(page, seed());
   await page.evaluate(`__t.type('#taskInput', 'orphan')`);
   current = await model();
   assert.equal(current[0].name, 'Новая секция 1');
   assert.deepEqual(current[0].tasks, ['[ ] orphan']);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Новая секция 1');
+
+  await page.evaluate(`__t.type('#taskInput', 'orphan follow-up')`);
+  current = await model();
+  assert.deepEqual(current[0].tasks, ['[ ] orphan follow-up', '[ ] orphan']);
 
   await page.evaluate(`__t.type('#sectionInput', 'Empty')`);
   current = await model();
@@ -85,6 +97,25 @@ test('adds tasks to the top of the selected section, a new section, or an auto-n
   const stored = await page.evaluate(`__t.storage(['tabs'])`);
   const work = stored.tabs.find((tab) => tab.id === 'tab_work');
   assert.deepEqual(work.sections.slice(0, 3), ['Named', 'Empty', 'Новая секция 1']);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Named');
+});
+
+test('adding an active task expands only its collapsed target section', { skip }, async () => {
+  await reloadWithStorage(page, seed());
+  await page.evaluate(`(() => {
+    __t.click('#collapseAllBtn');
+    __t.click('#sectionSelect');
+    [...document.querySelectorAll('#sectionSelectList .csel-item')].find((li) => li.dataset.value === 'Beta')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#taskInput', 'fresh');
+  })()`);
+
+  assert.deepEqual(await model(), [
+    { name: 'Alpha', collapsed: true, tasks: [] },
+    { name: 'Beta', collapsed: false, tasks: ['[ ] fresh', '[ ] four'] },
+  ]);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Beta');
+  assert.equal(await page.evaluate(`document.getElementById('collapseAllBtn').textContent`), '▸ свернуть');
 });
 
 test('toggle moves a finished task to the end and a reopened task to the top', { skip }, async () => {
