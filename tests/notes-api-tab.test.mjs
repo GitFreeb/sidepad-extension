@@ -48,6 +48,15 @@ test('document maps to legacy tab model with stable order, empty sections and de
   assert.equal(Object.hasOwn(tab.tasks[0], 'ref'), false);
 });
 
+test('document preserves UTC creation timestamps without backfilling legacy tasks', () => {
+  const source = doc('created', [['Inbox', ['new', 'legacy']]]);
+  source.sections[0].tasks[0].created_at = '2026-11-17T08:09:10.123Z';
+
+  const tab = documentToTab(source);
+  assert.equal(tab.tasks[0].createdAt, '2026-11-17T08:09:10.123Z');
+  assert.equal(Object.hasOwn(tab.tasks[1], 'createdAt'), false);
+});
+
 test('task intents become single semantic operations with fresh refs', () => {
   const toggle = captureIntent(base, { kind: 'task.toggle', id: idOf(base, 'two') });
   assert.deepEqual(planOperation(base, toggle), { type: 'task.toggle', task_ref: 't_a_0_1', done: true });
@@ -71,6 +80,16 @@ test('create uses the existing section or creates a new one at the top', () => {
   const fresh = captureIntent(base, { kind: 'task.create', sectionName: 'Later', text: 'new', url: '' });
   assert.deepEqual(planOperation(base, fresh), {
     type: 'section.create', section: { name: 'Later' }, task: { text: 'new' }, index: 0,
+  });
+
+  const serverDefault = captureIntent(base, { kind: 'task.create', sectionName: 'Work', text: 'uses default', url: '' });
+  assert.deepEqual(planOperation(base, serverDefault), {
+    type: 'task.create', section_ref: 's_a_1', task: { text: 'uses default' },
+  });
+
+  const whitespaceUrl = captureIntent(base, { kind: 'task.create', sectionName: 'Work', text: 'also default', url: '   ' });
+  assert.deepEqual(planOperation(base, whitespaceUrl), {
+    type: 'task.create', section_ref: 's_a_1', task: { text: 'also default' },
   });
 
   const emptySection = captureIntent(base, { kind: 'section.create', name: 'Plans' });

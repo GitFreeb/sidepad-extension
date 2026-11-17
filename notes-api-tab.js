@@ -78,6 +78,7 @@ export function documentToTab(document) {
         text: task.text,
         url: task.url || '',
         done: Boolean(task.done),
+        ...(typeof task.created_at === 'string' && task.created_at ? { createdAt: task.created_at } : {}),
       });
     }
   }

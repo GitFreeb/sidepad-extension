@@ -94,10 +94,12 @@ const ui = {
   notice: null,
   appliedRevision: null,
   deferredApply: false,
+  deferredApplyLocal: false,
   queue: [],
   pumping: false,
   retrying: false,
   ambiguousTaskCreate: null,
+  ambiguousSectionRename: null,
 };
 
 /* ── Backend registered in popup.js ── */
@@ -184,6 +186,22 @@ async function pump() {
       }
       if (!operation) continue;
       const succeeded = await mode.submit(operation);
+      if (succeeded && intent.kind === 'section.update') {
+        ui.ambiguousSectionRename = null;
+        sidepadConfirmSectionRename(intent.sectionName, intent.name);
+      } else if (mode.state.conflictReason === 'ambiguous' && intent.kind === 'section.update') {
+        ui.ambiguousSectionRename = {
+          operationId: mode.state.pendingMutation?.operationId || null,
+          oldName: intent.sectionName,
+          newName: intent.name,
+        };
+      }
+      // SAVE_SUCCESS emits synchronously inside mode.submit(). Keep that
+      // confirmed snapshot deferred until rename state has moved from the old
+      // name to the new one; otherwise render() clears the now-missing sticky
+      // selection before the post-success hook can preserve it.
+      if (succeeded) applySnapshot();
+      if (succeeded) sidepadReconcileDefaultSection();
       if (succeeded && intent.kind === 'task.create') {
         ui.ambiguousTaskCreate = null;
         sidepadConfirmActiveTaskCreate(intent.sectionName, queued.selectionAtSubmit);
@@ -196,6 +214,7 @@ async function pump() {
       }
       if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
         ui.ambiguousTaskCreate = null;
+        ui.ambiguousSectionRename = null;
         ui.queue = [];
         notify(mode.state.conflictReason === 'rejected' ? 'noticeRejected' : 'noticeConflict');
         // Конфликт: перечитать документ без повтора операции.
@@ -209,30 +228,45 @@ async function pump() {
     }
   } finally {
     ui.pumping = false;
+    if (ui.deferredApply) applySnapshot({ localOperation: ui.deferredApplyLocal });
     renderChrome();
   }
 }
 
 /* ── Snapshot → popup.js ── */
 
-function applySnapshot({ force = false } = {}) {
+function applySnapshot({ force = false, localOperation = false } = {}) {
   const snapshot = mode.state.confirmed;
   if (!mode.enabled || !snapshot?.document) return;
   if (!force && snapshot.revision === ui.appliedRevision) return;
   if (sidepadServerBusy()) {
     ui.deferredApply = true;
+    ui.deferredApplyLocal ||= localOperation;
     return;
   }
-  const remote = ui.appliedRevision !== null && !ui.pumping && !ui.retrying;
+  const selectDefault = ui.appliedRevision === null;
+  const remote = ui.appliedRevision !== null && !ui.pumping && !ui.retrying && !localOperation;
   ui.appliedRevision = snapshot.revision;
   ui.deferredApply = false;
-  sidepadApplyServerTab(documentToTab(snapshot.document), { remote });
+  ui.deferredApplyLocal = false;
+  sidepadApplyServerTab(documentToTab(snapshot.document), {
+    remote,
+    selectDefault,
+    preserveMissingDefault: ui.pumping || ui.retrying,
+  });
 }
 
 let lastWritable = null;
 
 function onModeChange() {
-  if (mode.enabled) applySnapshot();
+  if (mode.enabled) {
+    const hasUnappliedSnapshot = mode.state.confirmed?.revision !== ui.appliedRevision;
+    if ((ui.pumping || ui.retrying) && hasUnappliedSnapshot) {
+      ui.deferredApply = true;
+      ui.deferredApplyLocal = true;
+    }
+    else applySnapshot();
+  }
   const writable = backend.canWrite();
   if (writable !== lastWritable) {
     lastWritable = writable;
@@ -247,7 +281,7 @@ function onModeChange() {
 const poller = new VisiblePoller({
   isVisible: () => document.visibilityState === 'visible',
   async tick() {
-    if (ui.deferredApply) applySnapshot();
+    if (ui.deferredApply) applySnapshot({ localOperation: ui.deferredApplyLocal });
     if (ui.pending) {
       await refreshPending();
       if (!ui.pending) renderChrome();
@@ -455,21 +489,39 @@ async function retryAmbiguous() {
     sectionName = pending.operation.section?.name || null;
   }
   const selectionAtSubmit = remembered?.selectionAtSubmit ?? null;
+  let rememberedRename = ui.ambiguousSectionRename?.operationId === pending?.operationId
+    ? ui.ambiguousSectionRename
+    : null;
+  if (!rememberedRename && pending?.operation?.type === 'section.update') {
+    const source = mode.state.confirmed?.document?.sections
+      ?.find((section) => section.ref === pending.operation.section_ref);
+    if (source?.name && pending.operation.section?.name) {
+      rememberedRename = { oldName: source.name, newName: pending.operation.section.name };
+    }
+  }
 
   ui.retrying = true;
   try {
     const succeeded = await mode.retryAmbiguous();
+    if (succeeded && rememberedRename) {
+      sidepadConfirmSectionRename(rememberedRename.oldName, rememberedRename.newName);
+      ui.ambiguousSectionRename = null;
+    }
+    if (succeeded) applySnapshot();
+    if (succeeded) sidepadReconcileDefaultSection();
     if (succeeded && sectionName) {
       sidepadConfirmActiveTaskCreate(sectionName, selectionAtSubmit);
       ui.ambiguousTaskCreate = null;
     }
     if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
       ui.ambiguousTaskCreate = null;
+      ui.ambiguousSectionRename = null;
       notify(mode.state.conflictReason === 'rejected' ? 'noticeRejected' : 'noticeConflict');
       await mode.refresh({ quiet: true });
     }
   } finally {
     ui.retrying = false;
+    if (ui.deferredApply) applySnapshot({ localOperation: ui.deferredApplyLocal });
   }
 }
 
@@ -512,6 +564,7 @@ async function deactivate() {
   ui.pending = false;
   ui.retrying = false;
   ui.ambiguousTaskCreate = null;
+  ui.ambiguousSectionRename = null;
   await cancelConnectAttempt(localStore).catch(() => {});
   await localStore.remove([SERVER_TAB_CLOSED_KEY]).catch(() => {});
   backend.legacyTabId = null;
