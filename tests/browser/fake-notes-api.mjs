@@ -27,15 +27,22 @@ function cleanUrl(value) {
 }
 
 export class FakeNotesApi {
-  constructor({ title = 'Synthetic', sections = [] } = {}) {
+  constructor({ title = 'Synthetic', sections = [], now = () => new Date().toISOString() } = {}) {
     this.title = title;
-    this.sections = sections.map(([name, tasks]) => ({
+    this.now = now;
+    this.sections = sections.map(([name, tasks, options = {}]) => ({
       name,
-      tasks: tasks.map((item) => ({
-        text: item.replace(/^\[[ x]\] /, ''),
-        done: item.startsWith('[x] '),
-        url: null,
-      })),
+      default_url: cleanUrl(options.default_url),
+      tasks: tasks.map((item) => {
+        const source = typeof item === 'string' ? { text: item } : item;
+        const text = source.text || '';
+        return {
+          text: text.replace(/^\[[ x]\] /, ''),
+          done: source.done ?? text.startsWith('[x] '),
+          url: cleanUrl(source.url),
+          ...(typeof source.created_at === 'string' ? { created_at: source.created_at } : {}),
+        };
+      }),
     }));
     this.pairings = new Map();
     this.credential = null;
@@ -57,6 +64,7 @@ export class FakeNotesApi {
       sections: this.sections.map((section, s) => ({
         ref: `s_${tag}_${s}`,
         name: section.name,
+        ...(section.default_url ? { default_url: section.default_url } : {}),
         tasks: section.tasks.map((task, t) => ({ ref: `t_${tag}_${s}_${t}`, ...task })),
       })),
     };
@@ -179,7 +187,12 @@ export class FakeNotesApi {
     switch (op.type) {
       case 'task.create': {
         const s = this.sectionByRef(op.section_ref);
-        this.sections[s].tasks.unshift({ text: op.task.text, done: Boolean(op.task.done), url: cleanUrl(op.task.url) });
+        this.sections[s].tasks.unshift({
+          text: op.task.text,
+          done: Boolean(op.task.done),
+          url: cleanUrl(op.task.url) || this.sections[s].default_url,
+          created_at: this.now(),
+        });
         return;
       }
       case 'task.update': {
@@ -213,8 +226,8 @@ export class FakeNotesApi {
       case 'section.create': {
         if (this.sections.some((section) => section.name === op.section.name)) throw new Rejected(400, 'validation_error');
         const index = op.index ?? this.sections.length;
-        const tasks = op.task ? [{ text: op.task.text, done: false, url: cleanUrl(op.task.url) }] : [];
-        this.sections.splice(index, 0, { name: op.section.name, tasks });
+        const tasks = op.task ? [{ text: op.task.text, done: false, url: cleanUrl(op.task.url), created_at: this.now() }] : [];
+        this.sections.splice(index, 0, { name: op.section.name, default_url: null, tasks });
         return;
       }
       case 'section.update': {

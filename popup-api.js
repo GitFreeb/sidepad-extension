@@ -98,6 +98,7 @@ const ui = {
   pumping: false,
   retrying: false,
   ambiguousTaskCreate: null,
+  ambiguousSectionRename: null,
 };
 
 /* ── Backend registered in popup.js ── */
@@ -184,6 +185,17 @@ async function pump() {
       }
       if (!operation) continue;
       const succeeded = await mode.submit(operation);
+      if (succeeded && intent.kind === 'section.update') {
+        ui.ambiguousSectionRename = null;
+        sidepadConfirmSectionRename(intent.sectionName, intent.name);
+      } else if (mode.state.conflictReason === 'ambiguous' && intent.kind === 'section.update') {
+        ui.ambiguousSectionRename = {
+          operationId: mode.state.pendingMutation?.operationId || null,
+          oldName: intent.sectionName,
+          newName: intent.name,
+        };
+      }
+      if (succeeded) sidepadReconcileDefaultSection();
       if (succeeded && intent.kind === 'task.create') {
         ui.ambiguousTaskCreate = null;
         sidepadConfirmActiveTaskCreate(intent.sectionName, queued.selectionAtSubmit);
@@ -196,6 +208,7 @@ async function pump() {
       }
       if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
         ui.ambiguousTaskCreate = null;
+        ui.ambiguousSectionRename = null;
         ui.queue = [];
         notify(mode.state.conflictReason === 'rejected' ? 'noticeRejected' : 'noticeConflict');
         // Конфликт: перечитать документ без повтора операции.
@@ -223,10 +236,15 @@ function applySnapshot({ force = false } = {}) {
     ui.deferredApply = true;
     return;
   }
+  const selectDefault = ui.appliedRevision === null;
   const remote = ui.appliedRevision !== null && !ui.pumping && !ui.retrying;
   ui.appliedRevision = snapshot.revision;
   ui.deferredApply = false;
-  sidepadApplyServerTab(documentToTab(snapshot.document), { remote });
+  sidepadApplyServerTab(documentToTab(snapshot.document), {
+    remote,
+    selectDefault,
+    preserveMissingDefault: ui.pumping || ui.retrying,
+  });
 }
 
 let lastWritable = null;
@@ -455,6 +473,16 @@ async function retryAmbiguous() {
     sectionName = pending.operation.section?.name || null;
   }
   const selectionAtSubmit = remembered?.selectionAtSubmit ?? null;
+  let rememberedRename = ui.ambiguousSectionRename?.operationId === pending?.operationId
+    ? ui.ambiguousSectionRename
+    : null;
+  if (!rememberedRename && pending?.operation?.type === 'section.update') {
+    const source = mode.state.confirmed?.document?.sections
+      ?.find((section) => section.ref === pending.operation.section_ref);
+    if (source?.name && pending.operation.section?.name) {
+      rememberedRename = { oldName: source.name, newName: pending.operation.section.name };
+    }
+  }
 
   ui.retrying = true;
   try {
@@ -463,8 +491,14 @@ async function retryAmbiguous() {
       sidepadConfirmActiveTaskCreate(sectionName, selectionAtSubmit);
       ui.ambiguousTaskCreate = null;
     }
+    if (succeeded && rememberedRename) {
+      sidepadConfirmSectionRename(rememberedRename.oldName, rememberedRename.newName);
+      ui.ambiguousSectionRename = null;
+    }
+    if (succeeded) sidepadReconcileDefaultSection();
     if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
       ui.ambiguousTaskCreate = null;
+      ui.ambiguousSectionRename = null;
       notify(mode.state.conflictReason === 'rejected' ? 'noticeRejected' : 'noticeConflict');
       await mode.refresh({ quiet: true });
     }
@@ -512,6 +546,7 @@ async function deactivate() {
   ui.pending = false;
   ui.retrying = false;
   ui.ambiguousTaskCreate = null;
+  ui.ambiguousSectionRename = null;
   await cancelConnectAttempt(localStore).catch(() => {});
   await localStore.remove([SERVER_TAB_CLOSED_KEY]).catch(() => {});
   backend.legacyTabId = null;

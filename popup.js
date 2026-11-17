@@ -5,6 +5,10 @@ const DEFAULT_TASKS = [];
 const I18N = {
   ru: {
     selectSectionPlaceholder: 'Выбор секции',
+    sectionSelectTitle:       'Выбрать секцию для новой задачи',
+    defaultSectionSetTitle:   'Назначить выбранную секцию по умолчанию',
+    defaultSectionResetTitle: 'Сбросить секцию по умолчанию',
+    defaultSectionMarkTitle:  'Секция по умолчанию',
     autoSectionBase:          'Новая секция',
     emptyList:          'Нет задач. Добавьте первую!',
     loadExample:        'Загрузить пример →',
@@ -23,6 +27,7 @@ const I18N = {
     deleteSectionTitle: 'Удалить секцию',
     copyTitle:          'Копировать',
     deleteTitle:        'Удалить',
+    createdAtTitle:     'Создано: {value}',
     sectionPlaceholder: 'новая секция...',
     taskPlaceholder:    'новая задача...',
     urlPlaceholder:     'url (необязательно)',
@@ -94,6 +99,10 @@ const I18N = {
   },
   en: {
     selectSectionPlaceholder: 'Select section',
+    sectionSelectTitle:       'Choose a section for the new task',
+    defaultSectionSetTitle:   'Set selected section as default',
+    defaultSectionResetTitle: 'Clear default section',
+    defaultSectionMarkTitle:  'Default section',
     autoSectionBase:          'New section',
     emptyList:          'No tasks. Add the first one!',
     loadExample:        'Load example →',
@@ -112,6 +121,7 @@ const I18N = {
     deleteSectionTitle: 'Delete section',
     copyTitle:          'Copy',
     deleteTitle:        'Delete',
+    createdAtTitle:     'Created: {value}',
     sectionPlaceholder: 'new section...',
     taskPlaceholder:    'new task...',
     urlPlaceholder:     'url (optional)',
@@ -279,6 +289,10 @@ function applyLang(l, save = true) {
   lb.textContent = tr('langLabel');
   lb.title       = tr('langTitle');
   document.getElementById('updateBannerClose').title = tr('updateBannerClose');
+  const sectionSelect = document.getElementById('sectionSelect');
+  sectionSelect.title = tr('sectionSelectTitle');
+  sectionSelect.setAttribute('aria-label', tr('sectionSelectTitle'));
+  updateDefaultSectionButton();
   if (save) {
     chrome.storage.local.set({ lang: l });
     render();
@@ -309,6 +323,8 @@ let allCollapsed = false;
    semantic operation, а tasks/sections приходят только из ответа сервера. */
 const SERVER_TAB_STORAGE = 'notes-api';
 const API_MODE_KEY = 'notesApiExperimentalModeV1';
+const DEFAULT_SECTIONS_KEY = 'sidepadDefaultSectionsV1';
+let defaultSectionsByTab = {};
 let serverBackend = null;
 let resolveSidepadReady;
 const sidepadReady = new Promise((resolve) => { resolveSidepadReady = resolve; });
@@ -376,6 +392,75 @@ function updateCollapseBtn() {
 /* ── Tab helpers ── */
 function getActiveTab() {
   return tabs.find(t => t.id === activeTabId);
+}
+
+function sanitizeDefaultSections(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([tabId, section]) =>
+    typeof tabId === 'string' && tabId.length > 0 && typeof section === 'string' && section.length > 0));
+}
+
+function persistDefaultSections() {
+  chrome.storage.local.set({ [DEFAULT_SECTIONS_KEY]: { ...defaultSectionsByTab } });
+}
+
+function defaultSectionFor(tab = getActiveTab()) {
+  return tab ? defaultSectionsByTab[tab.id] || null : null;
+}
+
+function availableSectionsFor(tab) {
+  if (!tab) return [];
+  const tabTasks = tab.id === activeTabId ? tasks : (tab.tasks || []);
+  const tabSections = tab.id === activeTabId ? sections : (tab.sections || []);
+  return [...new Set([...tabSections, ...tabTasks.map(task => task.section).filter(Boolean)])];
+}
+
+function forgetDefaultSection(tabId) {
+  if (!Object.hasOwn(defaultSectionsByTab, tabId)) return false;
+  delete defaultSectionsByTab[tabId];
+  persistDefaultSections();
+  return true;
+}
+
+function updateDefaultSectionButton() {
+  const button = document.getElementById('defaultSectionBtn');
+  if (!button) return;
+  const preferred = defaultSectionFor();
+  const isDefault = selectedSection !== null && selectedSection === preferred;
+  button.disabled = selectedSection === null;
+  button.textContent = isDefault ? '★' : '☆';
+  button.setAttribute('aria-pressed', String(isDefault));
+  const title = tr(isDefault ? 'defaultSectionResetTitle' : 'defaultSectionSetTitle');
+  button.title = title;
+  button.setAttribute('aria-label', title);
+}
+
+function reconcileDefaultSection(tab = getActiveTab(), { select = false, clearMissing = true } = {}) {
+  if (!tab) return;
+  const preferred = defaultSectionFor(tab);
+  const available = availableSectionsFor(tab);
+  if (preferred && !available.includes(preferred)) {
+    if (clearMissing) forgetDefaultSection(tab.id);
+    if (tab.id === activeTabId && selectedSection === preferred) setSection(null);
+  } else if (preferred && select && tab.id === activeTabId) {
+    setSection(preferred);
+  }
+  if (tab.id === activeTabId) updateDefaultSectionButton();
+}
+
+function sidepadConfirmSectionRename(oldName, newName) {
+  const tab = getActiveTab();
+  if (!tab) return;
+  if (defaultSectionFor(tab) === oldName) {
+    defaultSectionsByTab[tab.id] = newName;
+    persistDefaultSections();
+  }
+  if (selectedSection === oldName) selectedSection = newName;
+  updateDefaultSectionButton();
+}
+
+function sidepadReconcileDefaultSection() {
+  reconcileDefaultSection(getActiveTab(), { clearMissing: true });
 }
 
 function saveAllTabs() {
@@ -462,6 +547,7 @@ function switchTab(id) {
   selectedSection = null;
   allCollapsed = false;
   updateCollapseBtn();
+  reconcileDefaultSection(next, { select: true });
   saveAllTabs();
   renderTabs();
   render();
@@ -493,6 +579,7 @@ function closeTab(id) {
   if (tabs.length === 1) {
     stopSync(tab.id);
     deleteStoredHandle(tab.id);
+    forgetDefaultSection(tab.id);
     const dt     = DEFAULT_TASKS.map(t => ({ ...t }));
     tab.title    = 'default';
     tab.tasks    = dt;
@@ -517,6 +604,7 @@ function closeTab(id) {
 
   stopSync(id);
   deleteStoredHandle(id);
+  if (!isServerTab(tab)) forgetDefaultSection(id);
   tabs.splice(tabIdx, 1);
   if (renamingTabId === id) renamingTabId = null;
   if (activeTabId === id) {
@@ -533,6 +621,7 @@ function closeTab(id) {
     selectedSection = null;
     allCollapsed = false;
     updateCollapseBtn();
+    reconcileDefaultSection(tabs[newIdx], { select: true });
     render();
   }
   saveAllTabs();
@@ -604,9 +693,10 @@ function migrateDefaultSection(tab) {
 }
 
 function loadAll() {
-  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang', API_MODE_KEY], async (data) => {
+  chrome.storage.local.get(['tabs', 'activeTabId', 'tasks', 'lightMode', 'listTitle', 'lang', API_MODE_KEY, DEFAULT_SECTIONS_KEY], async (data) => {
     applyTheme(!!data.lightMode);
     applyLang(data.lang || 'en', false);
+    defaultSectionsByTab = sanitizeDefaultSections(data[DEFAULT_SECTIONS_KEY]);
 
     // Без включённого Notes API вкладка notes.md не показывается вовсе —
     // legacy-интерфейс восстанавливается полностью.
@@ -635,6 +725,7 @@ function loadAll() {
     applyTitle(active.title);
     applyAutoSaveButton(active);
     resetCollapsedState();
+    reconcileDefaultSection(active, { select: !isServerTab(active), clearMissing: !isServerTab(active) });
     renderTabs();
     render();
     checkForUpdate();
@@ -786,6 +877,27 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
 
 /* ── Markdown parser ── */
 const URL_RE = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g;
+const CREATED_AT_METADATA_RE = /^<!-- notes-lab:created-at=([^\s]+) -->$/;
+
+function validCreatedAt(value) {
+  if (typeof value !== 'string' || !/Z$/.test(value) || !/^\d{4}-\d{2}-\d{2}T/.test(value)) return null;
+  return Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+function createdAtFromMetadata(line) {
+  const match = line.match(CREATED_AT_METADATA_RE);
+  if (!match) return null;
+  try {
+    return validCreatedAt(decodeURIComponent(match[1]));
+  } catch {
+    return null;
+  }
+}
+
+function createdAtMetadata(value) {
+  const timestamp = validCreatedAt(value);
+  return timestamp ? `<!-- notes-lab:created-at=${encodeURIComponent(timestamp)} -->` : '';
+}
 
 function parseMd(content, fileName) {
   const lines = content.split('\n');
@@ -798,9 +910,19 @@ function parseMd(content, fileName) {
   const isMd = lines.some(l => /^\s*[-*]\s+\S/.test(l));
 
   if (isMd) {
+    let metadataTaskIndex = null;
     for (const line of lines) {
       const t = line.trim();
-      if (!t || t === '---') continue;
+      if (!t || t === '---') {
+        metadataTaskIndex = null;
+        continue;
+      }
+      if (t.startsWith('<!--')) {
+        const createdAt = metadataTaskIndex === null ? null : createdAtFromMetadata(t);
+        if (createdAt) result[metadataTaskIndex] = { ...result[metadataTaskIndex], createdAt };
+        metadataTaskIndex = null;
+        continue;
+      }
       if (/^[-*]\s/.test(t)) {
         let raw = t.slice(2).trim();
         let done = false;
@@ -810,8 +932,12 @@ function parseMd(content, fileName) {
         const url = matches[0] ? matches[0].replace(/[),>]+$/, '') : '';
         const text = raw.replace(URL_RE, '').replace(/\s{2,}/g, ' ').trim() || raw;
         result.push({ id: id++, section, text, url, done });
+        metadataTaskIndex = result.length - 1;
       } else if (!t.startsWith('|') && !t.startsWith('`') && !t.startsWith('!') && t.length < 240) {
+        metadataTaskIndex = null;
         section = t.replace(/^#+\s*/, '').trim() || section;
+      } else {
+        metadataTaskIndex = null;
       }
     }
     return result;
@@ -821,6 +947,7 @@ function parseMd(content, fileName) {
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim();
     if (!t || t === '---' || /^[=\-]{3,}$/.test(t)) continue;
+    if (t.startsWith('<!--')) continue;
 
     const nextT = (lines[i + 1] || '').trim();
 
@@ -929,6 +1056,7 @@ function applyImportedFile(text, fileName) {
   activeTabId = newTab.id;
   tasks    = imported;
   sections = newSections;
+  selectedSection = null;
 
   // Close the empty default tab if other tabs now exist
   const defaultIdx = tabs.findIndex(t => t.title === 'default' && t.id !== newTab.id);
@@ -1005,6 +1133,8 @@ function generateMd(taskList, titleStr, sectionsList) {
       md += `- [${item.done ? 'x' : ' '}] ${item.text}`;
       if (item.url) md += `  ${item.url}`;
       md += '\n';
+      const metadata = createdAtMetadata(item.createdAt);
+      if (metadata) md += `${metadata}\n`;
     });
     md += '\n';
   });
@@ -1065,6 +1195,7 @@ async function pollTab(tabId) {
     const parsed = parseMd(text, tab.title);
     tab.tasks    = parsed;
     tab.sections = deriveSections(parsed);
+    reconcileDefaultSection(tab, { clearMissing: true });
     state.lastKnownMtime = file.lastModified; // advance only after a successful apply
 
     if (tabId === activeTabId) {
@@ -1114,6 +1245,7 @@ async function startSync(tab, handle) {
     }
     tab.tasks    = parsed;
     tab.sections = deriveSections(parsed);
+    reconcileDefaultSection(tab, { clearMissing: true });
     if (tab.id === activeTabId) {
       tasks    = tab.tasks;
       sections = tab.sections;
@@ -1338,6 +1470,7 @@ async function loadExample() {
     activeTabId = newTab.id;
     tasks    = imported;
     sections = newTab.sections;
+    selectedSection = null;
 
     const defaultIdx = tabs.findIndex(t => t.title === 'default' && t.id !== newTab.id);
     if (defaultIdx !== -1) {
@@ -1381,6 +1514,16 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function formatCreatedAt(value, { long = false } = {}) {
+  const timestamp = validCreatedAt(value);
+  if (!timestamp) return null;
+  const date = new Date(timestamp);
+  const locale = lang === 'ru' ? 'ru-RU' : 'en-US';
+  return new Intl.DateTimeFormat(locale, long
+    ? { dateStyle: 'medium', timeStyle: 'medium' }
+    : { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
 function render() {
@@ -1460,6 +1603,10 @@ function render() {
               ${otherSecs.map(s => `<li data-action="move-to-section" data-section="${escapeHtml(s)}">${escapeHtml(s)}</li>`).join('')}
             </ul>`
           : '';
+        const createdAt = formatCreatedAt(task.createdAt);
+        const createdAtTitle = createdAt
+          ? tr('createdAtTitle').replace('{value}', formatCreatedAt(task.createdAt, { long: true }))
+          : '';
         html += `<li class="task-item ${task.done ? 'done' : ''}${isEditing ? ' editing' : ''}${isMoveOpen ? ' move-open' : ''}" data-id="${task.id}" draggable="${isEditing || readOnly ? 'false' : 'true'}">
           <span class="drag-handle" draggable="false">⠿</span>
           <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
@@ -1467,9 +1614,14 @@ function render() {
             ${isEditing
               ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="${isServerTab() ? SERVER_TEXT_MAX : 240}" draggable="false">`
               : `<div class="task-text" data-action="edit-text">${escapeHtml(task.text)}</div>`}
-            ${task.url
-              ? `<a class="task-link" href="${escapeHtml(task.url)}" data-action="link" title="${escapeHtml(task.url)}" draggable="false">${escapeHtml(task.url)}</a>`
-              : ''}
+            ${task.url || createdAt ? `<div class="task-meta">
+              ${task.url
+                ? `<a class="task-link" href="${escapeHtml(task.url)}" data-action="link" title="${escapeHtml(task.url)}" draggable="false">${escapeHtml(task.url)}</a>`
+                : ''}
+              ${createdAt
+                ? `<time class="task-created" datetime="${escapeHtml(task.createdAt)}" title="${escapeHtml(createdAtTitle)}">${escapeHtml(createdAt)}</time>`
+                : ''}
+            </div>` : ''}
           </div>
           <button class="btn-copy" data-action="copy" title="${tr('copyTitle')}" draggable="false">⧉</button>
           ${otherSecs.length > 0 && !readOnly
@@ -1540,6 +1692,7 @@ function finishSectionRename(input) {
   if (routeIntent({ kind: 'section.update', sectionName: oldName, name: newName })) { render(); return; }
   sections = [...new Set(sections.map(s => s === oldName ? newName : s))];
   tasks    = tasks.map(t => t.section === oldName ? { ...t, section: newName } : t);
+  sidepadConfirmSectionRename(oldName, newName);
   if (collapsedSections.has(oldName)) {
     collapsedSections.delete(oldName);
     collapsedSections.add(newName);
@@ -1555,6 +1708,7 @@ function deleteSection(name) {
   collapsedSections.delete(name);
   sections = sections.filter(s => s !== name);
   tasks    = tasks.filter(t => t.section !== name);
+  reconcileDefaultSection(getActiveTab(), { clearMissing: true });
   saveTasks();
   render();
 }
@@ -1699,21 +1853,27 @@ function setSection(s) {
   if (valEl) valEl.textContent = s === null ? tr('selectSectionPlaceholder') : s;
   document.querySelectorAll('#sectionSelectList .csel-item').forEach(li => {
     li.classList.toggle('active', li.dataset.value === s);
+    li.setAttribute('aria-selected', String(li.dataset.value === s));
     li.classList.remove('focused');
   });
+  updateDefaultSectionButton();
 }
 
 function openCsel() {
   const csel = document.getElementById('sectionSelect');
   if (!csel) return;
   csel.classList.add('open');
+  csel.setAttribute('aria-expanded', 'true');
   const active = csel.querySelector('.csel-item.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
 
 function closeCsel() {
   const csel = document.getElementById('sectionSelect');
-  if (csel) csel.classList.remove('open');
+  if (csel) {
+    csel.classList.remove('open');
+    csel.setAttribute('aria-expanded', 'false');
+  }
 }
 
 function updateSectionSelect() {
@@ -1722,18 +1882,44 @@ function updateSectionSelect() {
   const fromTasks = [...new Set(tasks.map(t => t.section).filter(Boolean))];
   const allSections = pinInbox([...new Set([...sections, ...fromTasks])]);
   if (selectedSection !== null && !allSections.includes(selectedSection)) selectedSection = null;
+  const preferred = defaultSectionFor();
   list.innerHTML = '';
   allSections.forEach(s => {
     const li = document.createElement('li');
-    li.className = 'csel-item' + (s === selectedSection ? ' active' : '');
-    li.textContent = s;
+    li.className = 'csel-item' + (s === selectedSection ? ' active' : '') + (s === preferred ? ' default' : '');
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', String(s === selectedSection));
+    const label = document.createElement('span');
+    label.textContent = s;
+    li.appendChild(label);
+    if (s === preferred) {
+      const mark = document.createElement('span');
+      mark.className = 'csel-default-mark';
+      mark.textContent = '★';
+      mark.title = tr('defaultSectionMarkTitle');
+      mark.setAttribute('aria-label', tr('defaultSectionMarkTitle'));
+      li.appendChild(mark);
+    }
     li.dataset.value = s;
     li.addEventListener('mousedown', (e) => { e.preventDefault(); setSection(s); closeCsel(); });
     list.appendChild(li);
   });
   const valEl = document.getElementById('sectionSelectVal');
   if (valEl) valEl.textContent = selectedSection === null ? tr('selectSectionPlaceholder') : selectedSection;
+  updateDefaultSectionButton();
 }
+
+document.getElementById('defaultSectionBtn').addEventListener('click', () => {
+  const tab = getActiveTab();
+  if (!tab || selectedSection === null) return;
+  if (defaultSectionFor(tab) === selectedSection) {
+    forgetDefaultSection(tab.id);
+  } else {
+    defaultSectionsByTab[tab.id] = selectedSection;
+    persistDefaultSections();
+  }
+  updateSectionSelect();
+});
 
 /* ── Add section ── */
 function addSection() {
@@ -1784,7 +1970,14 @@ function addTask() {
   } else if (!sections.includes(section)) {
     sections.push(section);
   }
-  const newTask = { id: Date.now() + 10001, section, text, url: linkEl.value.trim(), done: false };
+  const newTask = {
+    id: Date.now() + 10001,
+    section,
+    text,
+    url: linkEl.value.trim(),
+    done: false,
+    createdAt: new Date().toISOString(),
+  };
   const firstIdx = tasks.findIndex(t => t.section === section);
   if (firstIdx === -1) tasks.push(newTask);
   else tasks.splice(firstIdx, 0, newTask);
@@ -2067,6 +2260,7 @@ function switchToOrCreateDefault() {
   resetCollapsedState();
   editingId = null; renamingSection = null; moveMenuTaskId = null;
   selectedSection = null; allCollapsed = false; updateCollapseBtn();
+  reconcileDefaultSection(defaultTab, { select: true, clearMissing: true });
   saveAllTabs(); renderTabs(); render();
 }
 
@@ -2109,6 +2303,7 @@ document.getElementById('clearDoneBtn').addEventListener('click', () => {
       autoSaveMd();
     }
     tasks = []; sections = [];
+    reconcileDefaultSection(activeTab, { clearMissing: true });
     saveTasks(); render();
     return;
   }
@@ -2186,6 +2381,7 @@ function activateTab(tab) {
   applyTitle(tab.title);
   applyAutoSaveButton(tab);
   resetViewState();
+  reconcileDefaultSection(tab, { select: true, clearMissing: !isServerTab(tab) || tab.sections.length > 0 });
   saveAllTabs(); renderTabs(); render();
 }
 
@@ -2217,7 +2413,7 @@ function sidepadDetachServer() {
   saveAllTabs(); renderTabs(); render();
 }
 
-function sidepadApplyServerTab(model, { remote = false } = {}) {
+function sidepadApplyServerTab(model, { remote = false, selectDefault = false, preserveMissingDefault = false } = {}) {
   const tab = tabs.find(t => isServerTab(t));
   if (!tab) return;
   tab.tasks = model.tasks;
@@ -2228,6 +2424,10 @@ function sidepadApplyServerTab(model, { remote = false } = {}) {
     if (remote) resetCollapsedState();
     else syncAutoCollapse();
   }
+  reconcileDefaultSection(tab, {
+    select: selectDefault || (tab.id === activeTabId && selectedSection === null),
+    clearMissing: !preserveMissingDefault,
+  });
   render();
 }
 

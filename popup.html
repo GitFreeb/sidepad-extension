@@ -100,10 +100,13 @@
         <div class="field">
           <input type="url"  id="linkInput" class="input url-input" placeholder="url (необязательно)">
         </div>
-        <div class="csel input" id="sectionSelect" tabindex="0">
-          <span class="csel-val" id="sectionSelectVal">Дополнительные задачи</span>
-          <span class="csel-arr">▾</span>
-          <ul class="csel-list" id="sectionSelectList"></ul>
+        <div class="section-picker">
+          <div class="csel input" id="sectionSelect" tabindex="0" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="sectionSelectList">
+            <span class="csel-val" id="sectionSelectVal">Дополнительные задачи</span>
+            <span class="csel-arr">▾</span>
+            <ul class="csel-list" id="sectionSelectList" role="listbox"></ul>
+          </div>
+          <button type="button" class="btn-default-section" id="defaultSectionBtn" aria-pressed="false">☆</button>
         </div>
       </div>
       <button id="addBtn" class="btn-add" title="Добавить (Enter)">+ добавить</button>

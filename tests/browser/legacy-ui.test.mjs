@@ -100,6 +100,77 @@ test('keeps the successful target selected for rapid task capture', { skip }, as
   assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Named');
 });
 
+test('stores an explicit default section per file tab without replacing sticky selection', { skip }, async () => {
+  await reloadWithStorage(page, seed());
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    [...document.querySelectorAll('#sectionSelectList .csel-item')].find((li) => li.dataset.value === 'Beta')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.click('#defaultSectionBtn');
+  })()`);
+
+  assert.deepEqual((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1, { tab_work: 'Beta' });
+  assert.equal(await page.evaluate(`document.getElementById('defaultSectionBtn').getAttribute('aria-pressed')`), 'true');
+  assert.equal(await page.evaluate(`document.querySelector('#sectionSelectList [data-value="Beta"]').classList.contains('default')`), true);
+
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    [...document.querySelectorAll('#sectionSelectList .csel-item')].find((li) => li.dataset.value === 'Alpha')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#taskInput', 'temporary target');
+    __t.type('#taskInput', 'temporary follow-up');
+  })()`);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Alpha');
+  assert.deepEqual((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1, { tab_work: 'Beta' });
+
+  await page.evaluate(`(() => {
+    __t.type('#sectionInput', 'Named Once', null);
+    __t.type('#taskInput', 'named precedence');
+  })()`);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Named Once');
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_work, 'Beta');
+
+  await page.evaluate(`__t.tab('dop.md').click()`);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Выбор секции');
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Old"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.click('#defaultSectionBtn');
+    __t.tab('work.md').click();
+  })()`);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Beta');
+  assert.deepEqual((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1, {
+    tab_work: 'Beta',
+    tab_dop: 'Old',
+  });
+
+  await reload(page);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Beta');
+  await page.evaluate(`(() => {
+    __t.section('Beta').querySelector('.btn-rename-section').click();
+    __t.type('.section-rename-input', 'Focus');
+  })()`);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Focus');
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_work, 'Focus');
+
+  await page.evaluate(`__t.click('#langBtn')`);
+  assert.match(await page.evaluate(`document.getElementById('defaultSectionBtn').title`), /default/i);
+  await page.evaluate(`__t.click('#defaultSectionBtn')`);
+  assert.equal(Object.hasOwn((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1, 'tab_work'), false);
+
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Focus"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.click('#defaultSectionBtn');
+    __t.section('Focus').querySelector('.btn-delete-section').click();
+  })()`);
+  const afterDelete = (await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1;
+  assert.equal(Object.hasOwn(afterDelete, 'tab_work'), false);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Select section');
+});
+
 test('adding an active task expands only its collapsed target section', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.evaluate(`(() => {
@@ -248,11 +319,124 @@ test('import creates a new tab from a Markdown file and export produces the same
   assert.equal(exported.text, '# plan.md\n\n## Inbox\n\n- [ ] alpha  https://example.test/x\n- [x] beta');
 });
 
+test('local timestamps survive edit, toggle, move and canonical Markdown round-trips', { skip }, async () => {
+  await reloadWithStorage(page, seed());
+  assert.equal(await page.evaluate(`__t.task('one').querySelector('.task-created')`), null);
+
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Alpha"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#taskInput', 'timestamped');
+  })()`);
+  const createdAt = await page.evaluate(`__t.task('timestamped').querySelector('.task-created').dateTime`);
+  assert.match(createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.equal(await page.evaluate(`__t.task('timestamped').querySelector('.task-created').textContent.includes('Invalid')`), false);
+  assert.equal(await page.evaluate(`__t.task('timestamped').querySelector('.task-created').textContent`), await page.evaluate(`new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(${JSON.stringify(createdAt)}))`));
+
+  await page.evaluate(`(() => {
+    __t.task('timestamped').querySelector('.task-text').click();
+    __t.type('.task-edit-input', 'timestamped edited');
+    __t.task('timestamped edited').querySelector('.task-checkbox').click();
+    __t.task('timestamped edited').querySelector('.btn-move').click();
+    document.querySelector('.move-section-menu [data-section="Beta"]').click();
+  })()`);
+  assert.equal(await page.evaluate(`__t.task('timestamped edited').querySelector('.task-created').dateTime`), createdAt);
+  assert.equal(await page.evaluate(`__t.task('timestamped edited').classList.contains('done')`), true);
+
+  const markdown = await page.evaluate(`generateMd()`);
+  const encoded = encodeURIComponent(createdAt);
+  assert.ok(markdown.includes(`- [x] timestamped edited\n<!-- notes-lab:created-at=${encoded} -->`));
+  const roundTrip = await page.evaluate(`parseMd(${JSON.stringify(markdown)}, 'work.md').find((task) => task.text === 'timestamped edited').createdAt`);
+  assert.equal(roundTrip, createdAt);
+
+  const autoSyncRoundTrip = await page.evaluate(`(async () => {
+    let contents = '';
+    const handle = {
+      async createWritable() {
+        return {
+          async write(value) { contents = value; },
+          async close() {},
+        };
+      },
+      async getFile() {
+        return { lastModified: 1, async text() { return contents; } };
+      },
+    };
+    const tab = getActiveTab();
+    await writeTabToHandle(handle, tab);
+    const started = await startSync(tab, handle);
+    stopSync(tab.id);
+    return { started, createdAt: tab.tasks.find((task) => task.text === 'timestamped edited').createdAt };
+  })()`);
+  assert.deepEqual(autoSyncRoundTrip, { started: true, createdAt });
+
+  await page.evaluate(`__t.click('#langBtn')`);
+  assert.equal(await page.evaluate(`__t.task('timestamped edited').querySelector('.task-created').textContent`), await page.evaluate(`new Intl.DateTimeFormat('en-US', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(${JSON.stringify(createdAt)}))`));
+
+  const invalid = await page.evaluate(`parseMd('# bad\\n\\n## Inbox\\n\\n<!-- arbitrary=value -->\\n- [ ] legacy\\n<!-- notes-lab:created-at=broken -->\\n<!-- notes-lab:unknown=x -->', 'bad.md')`);
+  assert.deepEqual(invalid.map((task) => ({ section: task.section, text: task.text, createdAt: task.createdAt })), [
+    { section: 'Inbox', text: 'legacy', createdAt: undefined },
+  ]);
+});
+
 test('language switch re-renders the static UI in English', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.evaluate(`__t.click('#langBtn')`);
   assert.equal(await page.evaluate(`document.getElementById('addBtn').textContent`), '+ add');
   assert.equal(await page.evaluate(`document.getElementById('clearDoneBtn').textContent`), '✕ clear');
+});
+
+test('light contrast stays hierarchical and all supported panel widths avoid horizontal overflow', { skip }, async () => {
+  await reloadWithStorage(page, seed());
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Alpha"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#linkInput', 'https://example.test/a-very-long-path-that-must-not-overflow', null);
+    __t.type('#taskInput', 'contrast sample');
+  })()`);
+
+  const styles = () => page.evaluate(`(() => {
+    const task = getComputedStyle(__t.task('contrast sample').querySelector('.task-text'));
+    const time = getComputedStyle(__t.task('contrast sample').querySelector('.task-created'));
+    return {
+      task: { color: task.color, fontSize: task.fontSize, fontWeight: task.fontWeight, lineHeight: task.lineHeight },
+      time: { color: time.color, fontSize: time.fontSize, fontWeight: time.fontWeight },
+    };
+  })()`);
+  const darkBefore = await styles();
+  assert.deepEqual(darkBefore.task, { color: 'rgb(255, 255, 255)', fontSize: '12px', fontWeight: '400', lineHeight: '18px' });
+
+  await page.evaluate(`__t.click('#themeBtn')`);
+  const light = await styles();
+  assert.equal(light.task.fontWeight, '500');
+  assert.notEqual(light.task.color, light.time.color);
+  assert.ok(parseFloat(light.time.fontSize) < parseFloat(light.task.fontSize));
+
+  for (const [width, height] of [[320, 720], [768, 1024], [960, 720]]) {
+    await page.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+    for (let language = 0; language < 2; language += 1) {
+      const layout = await page.evaluate(`(() => ({
+        viewport: document.documentElement.clientWidth,
+        page: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth,
+        taskRight: __t.task('contrast sample').getBoundingClientRect().right,
+        offenders: [...document.querySelectorAll('body *')]
+          .filter((element) => element.getBoundingClientRect().right > document.documentElement.clientWidth + 0.5)
+          .slice(0, 8)
+          .map((element) => ({ tag: element.tagName, id: element.id, className: element.className, right: element.getBoundingClientRect().right })),
+      }))()`);
+      assert.ok(layout.page <= layout.viewport, `document overflow at ${width}px: ${JSON.stringify(layout)}`);
+      assert.ok(layout.body <= layout.viewport, `body overflow at ${width}px: ${JSON.stringify(layout)}`);
+      assert.ok(layout.taskRight <= layout.viewport, `task overflow at ${width}px: ${JSON.stringify(layout)}`);
+      await page.evaluate(`__t.click('#langBtn')`);
+    }
+  }
+
+  await page.evaluate(`__t.click('#themeBtn')`);
+  assert.deepEqual(await styles(), darkBefore, 'dark typography and colors stay unchanged');
+  await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
 test('legacy mode never contacts Notes API from the panel or the service worker', { skip }, async () => {

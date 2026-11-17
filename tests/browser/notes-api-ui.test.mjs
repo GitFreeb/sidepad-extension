@@ -66,6 +66,7 @@ before(async () => {
       ['Work', ['report']],
     ],
   });
+  fake.sections[0].tasks[0].created_at = '2026-11-17T08:09:10.123Z';
   browser = await Browser.launch({ executable, extension: extensionDir });
   fake.extensionOrigin = `chrome-extension://${browser.extensionId}`;
   worker = await browser.serviceWorker();
@@ -134,6 +135,21 @@ test('web probe and pair connect Sidepad through the service worker only', { ski
   ]);
   assert.equal(await page.evaluate(`document.querySelector('.bc-path').textContent`), 'notes.lab/');
   assert.equal(await page.evaluate(`document.getElementById('syncState').textContent`), '✓');
+});
+
+test('renders API creation time in the active locale without backfilling or polling flicker', { skip }, async () => {
+  const createdAt = '2026-11-17T08:09:10.123Z';
+  assert.equal(await page.evaluate(`__t.task('first').querySelector('.task-created').dateTime`), createdAt);
+  assert.equal(await page.evaluate(`__t.task('second').querySelector('.task-created')`), null);
+  assert.equal(await page.evaluate(`__t.task('first').querySelector('.task-created').textContent`), await page.evaluate(`new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(${JSON.stringify(createdAt)}))`));
+
+  await page.evaluate(`__t.task('first').querySelector('.task-created').dataset.pollMarker = 'same-node'`);
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  assert.equal(await page.evaluate(`__t.task('first').querySelector('.task-created').dataset.pollMarker`), 'same-node');
+
+  await page.evaluate(`__t.click('#langBtn')`);
+  assert.equal(await page.evaluate(`__t.task('first').querySelector('.task-created').textContent`), await page.evaluate(`new Intl.DateTimeFormat('en-US', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(${JSON.stringify(createdAt)}))`));
+  await page.evaluate(`__t.click('#langBtn')`);
 });
 
 test('legacy choice is explicit: saving dop.md locks it read-only while other file tabs stay editable', { skip }, async () => {
@@ -228,10 +244,12 @@ test('confirmed active task creation expands only its collapsed target', { skip 
 
 test('toggle, inline edit and delete map to task.toggle, task.update and task.delete', { skip }, async () => {
   await settle();
+  const firstCreatedAt = await page.evaluate(`__t.task('first').querySelector('.task-created').dateTime`);
   await page.evaluate(`__t.task('first').querySelector('.task-checkbox').click()`);
   await page.waitFor(`__t.model().find((s) => s.name === 'Inbox').tasks.at(-1) === '[x] first'`);
   assert.equal(op().type, 'task.toggle');
   assert.equal(op().done, true);
+  assert.equal(await page.evaluate(`__t.task('first').querySelector('.task-created').dateTime`), firstCreatedAt);
   assert.deepEqual((await model()).find((s) => s.name === 'Inbox').tasks, ['[ ] second', '[x] closed', '[x] first']);
 
   await page.evaluate(`__t.task('closed').querySelector('.task-checkbox').click()`);
@@ -383,6 +401,84 @@ test('503 trash_recovery_blocked keeps task creation ambiguous until exact manua
   await new Promise((resolve) => setTimeout(resolve, 900));
 });
 
+test('server default URL applies only to empty create intent and survives move and exact retry', { skip }, async () => {
+  await settle();
+  const work = fake.sections.find((section) => section.name === 'Work');
+  work.default_url = 'https://default.example.test/work';
+  const refreshStart = fake.log.length;
+  await page.evaluate(`window.dispatchEvent(new Event('focus'))`);
+  const refreshDeadline = Date.now() + 5000;
+  while (!fake.log.slice(refreshStart).some((entry) => entry.method === 'GET' && entry.path === '/api/v1/document')) {
+    if (Date.now() >= refreshDeadline) throw new Error('default URL refresh did not reach the synthetic API');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await settle();
+
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Work"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#taskInput', 'server default link');
+  })()`);
+  await page.waitFor(`__t.task('server default link') !== undefined`);
+  assert.deepEqual(op(), { type: 'task.create', section_ref: op().section_ref, task: { text: 'server default link' } });
+  assert.equal(await page.evaluate(`__t.task('server default link').querySelector('.task-link').textContent`), work.default_url);
+
+  await page.evaluate(`(() => {
+    __t.type('#linkInput', 'https://explicit.example.test/task', null);
+    __t.type('#taskInput', 'explicit link');
+  })()`);
+  await page.waitFor(`__t.task('explicit link') !== undefined`);
+  assert.equal(await page.evaluate(`__t.task('explicit link').querySelector('.task-link').textContent`), 'https://explicit.example.test/task');
+
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Inbox"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#taskInput', 'move without default');
+  })()`);
+  await page.waitFor(`__t.task('move without default') !== undefined`);
+  const movedCreatedAt = await page.evaluate(`__t.task('move without default').querySelector('.task-created').dateTime`);
+  await page.evaluate(`(() => {
+    __t.task('move without default').querySelector('.btn-move').click();
+    document.querySelector('.move-section-menu [data-section="Work"]').click();
+  })()`);
+  await page.waitFor(`__t.model().find((section) => section.name === 'Work').tasks.includes('[ ] move without default')`);
+  assert.equal(await page.evaluate(`__t.task('move without default').querySelector('.task-link')`), null);
+  assert.equal(await page.evaluate(`__t.task('move without default').querySelector('.task-created').dateTime`), movedCreatedAt);
+
+  await page.evaluate(`(() => {
+    __t.task('move without default').querySelector('.task-text').click();
+    __t.type('.task-edit-input', 'move without default edited');
+  })()`);
+  await page.waitFor(`__t.task('move without default edited') !== undefined`);
+  await page.evaluate(`__t.task('move without default edited').querySelector('.task-checkbox').click()`);
+  await page.waitFor(`__t.task('move without default edited').classList.contains('done')`);
+  assert.equal(await page.evaluate(`__t.task('move without default edited').querySelector('.task-created').dateTime`), movedCreatedAt);
+
+  fake.failNext = { kind: 'lost-response' };
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Work"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#taskInput', 'default retry');
+  })()`);
+  await page.waitFor(`document.getElementById('syncState').dataset.kind === 'retry'`);
+  const lost = fake.mutations().at(-1).body;
+  const retryCreatedAt = fake.sections.find((section) => section.name === 'Work').tasks
+    .find((task) => task.text === 'default retry').created_at;
+  await page.evaluate(`[...document.querySelectorAll('.server-notice-btn')].find((button) => button.textContent === 'повторить').click()`);
+  await settle();
+  await page.waitFor(`__t.task('default retry') !== undefined`);
+  const attempts = fake.mutations().filter((entry) => entry.body.operation_id === lost.operation_id);
+  assert.equal(attempts.length, 2);
+  assert.deepEqual(attempts[1].body, attempts[0].body);
+  assert.equal(fake.sections.find((section) => section.name === 'Work').tasks.filter((task) => task.text === 'default retry').length, 1);
+  assert.equal(await page.evaluate(`__t.task('default retry').querySelector('.task-link').textContent`), work.default_url);
+  assert.equal(await page.evaluate(`__t.task('default retry').querySelector('.task-created').dateTime`), retryCreatedAt);
+});
+
 test('offline shows the last snapshot read-only with bounded polling, then recovers', { skip }, async () => {
   await settle();
   await page.evaluate(`__t.section('Work').click()`);
@@ -513,6 +609,59 @@ test('pasting text with tabs, double spaces and a link still saves instead of re
   await page.evaluate(`__t.key('.task-edit-input', 'Enter')`);
   await page.waitFor(`__t.task('Позвонить по поводу встречи') !== undefined`, { timeout: 6000 });
   assert.equal(await page.evaluate(`__t.task('Позвонить по поводу встречи').querySelector('.task-link').textContent`), 'https://example.test/meet');
+});
+
+test('server tab keeps its own default section across switches and reloads, then follows rename and remote removal', { skip }, async () => {
+  await settle();
+  await page.evaluate(`__t.type('#sectionInput', 'Default Target')`);
+  await page.waitFor(`__t.section('Default Target') !== undefined`);
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Default Target"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.click('#defaultSectionBtn');
+  })()`);
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_notes_api, 'Default Target');
+
+  await page.evaluate(`(() => { __t.tab('work.md').click(); __t.tab('notes.md').click(); })()`);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Default Target');
+  await reload(page);
+  await page.waitFor(`__t.tabs().includes('*notes.md')`);
+  await settle();
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Default Target');
+
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Inbox"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    __t.type('#taskInput', 'temporary server target');
+  })()`);
+  await page.waitFor(`__t.task('temporary server target') !== undefined`);
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Inbox');
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_notes_api, 'Default Target');
+
+  await page.evaluate(`(() => {
+    __t.section('Default Target').querySelector('.btn-rename-section').click();
+    __t.type('.section-rename-input', 'Default Renamed');
+  })()`);
+  await page.waitFor(`__t.section('Default Renamed') !== undefined`);
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_notes_api, 'Default Renamed');
+
+  await page.evaluate(`__t.tab('notes.md').querySelector('.tab-close').click()`);
+  await page.waitFor(`!__t.tabs().some((name) => name.includes('notes.md'))`);
+  await page.evaluate(`__t.click('#openServerTabBtn')`);
+  await page.waitFor(`__t.tabs().includes('*notes.md')`);
+  await settle();
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Default Renamed');
+
+  await page.evaluate(`__t.click('#langBtn')`);
+  assert.match(await page.evaluate(`document.getElementById('defaultSectionBtn').title`), /default/i);
+  await page.evaluate(`__t.click('#langBtn')`);
+
+  fake.sections = fake.sections.filter((section) => section.name !== 'Default Renamed');
+  await page.evaluate(`window.dispatchEvent(new Event('focus'))`);
+  await page.waitFor(`chrome.storage.local.get('sidepadDefaultSectionsV1').then((value) => !Object.hasOwn(value.sidepadDefaultSectionsV1 || {}, 'tab_notes_api'))`, { timeout: 8000 });
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Выбор секции');
 });
 
 test('✕ clear on notes.md only closes the local tab after confirmation and sends no mutation', { skip }, async () => {
