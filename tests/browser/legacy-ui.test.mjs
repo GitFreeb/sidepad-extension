@@ -380,6 +380,40 @@ test('local timestamps survive edit, toggle, move and canonical Markdown round-t
   ]);
 });
 
+test('task metadata blocks keep created-at after flagged and stop at invalid or structural boundaries', { skip }, async () => {
+  await reloadWithStorage(page, seed());
+  const createdAt = '2026-11-17T08:09:10.123Z';
+  const encoded = encodeURIComponent(createdAt);
+  const canonical = `# flagged\n\n## Inbox\n\n- [ ] Flagged task\n<!-- notes-lab:flagged=true -->\n<!-- notes-lab:created-at=${encoded} -->\n- [ ] Created only\n<!-- notes-lab:created-at=${encoded} -->`;
+  await page.evaluate(`(() => {
+    const input = document.getElementById('importFileInput');
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([${JSON.stringify(canonical)}], 'flagged.md', { type: 'text/markdown' }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await page.waitFor(`__t.tabs().includes('*flagged.md')`);
+  assert.equal(await page.evaluate(`__t.task('Flagged task').querySelector('.task-created').dateTime`), createdAt);
+  assert.equal(await page.evaluate(`__t.task('Created only').querySelector('.task-created').dateTime`), createdAt);
+  assert.equal(await page.evaluate(`__t.task('Flagged task').querySelector('.task-created').textContent.includes('Invalid')`), false);
+
+  const exported = await page.evaluate(`generateMd()`);
+  assert.ok(exported.includes(`- [ ] Flagged task\n<!-- notes-lab:created-at=${encoded} -->`));
+  assert.equal(exported.includes('notes-lab:flagged='), false, 'Sidepad does not add a flag model or flag metadata');
+
+  const invalid = `# invalid\n\n## Inbox\n\n- [ ] Bad flag\n<!-- notes-lab:flagged=maybe -->\n<!-- notes-lab:created-at=${encoded} -->\n- [ ] Bad date\n<!-- notes-lab:created-at=broken -->\n<!-- notes-lab:created-at=${encoded} -->\n- [ ] Unrelated\n<!-- arbitrary=value -->\n<!-- notes-lab:created-at=${encoded} -->\n- [ ] Blank boundary\n\n<!-- notes-lab:created-at=${encoded} -->\n- [ ] Heading boundary\n## Later\n<!-- notes-lab:created-at=${encoded} -->\n- [ ] Next-task source\n<!-- notes-lab:flagged=true -->\n- [ ] Next task\n<!-- notes-lab:created-at=${encoded} -->`;
+  const parsed = await page.evaluate(`parseMd(${JSON.stringify(invalid)}, 'invalid.md')`);
+  assert.deepEqual(parsed.map((task) => ({ section: task.section, text: task.text, createdAt: task.createdAt })), [
+    { section: 'Inbox', text: 'Bad flag', createdAt: undefined },
+    { section: 'Inbox', text: 'Bad date', createdAt: undefined },
+    { section: 'Inbox', text: 'Unrelated', createdAt: undefined },
+    { section: 'Inbox', text: 'Blank boundary', createdAt: undefined },
+    { section: 'Inbox', text: 'Heading boundary', createdAt: undefined },
+    { section: 'Later', text: 'Next-task source', createdAt: undefined },
+    { section: 'Later', text: 'Next task', createdAt },
+  ]);
+});
+
 test('language switch re-renders the static UI in English', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.evaluate(`__t.click('#langBtn')`);

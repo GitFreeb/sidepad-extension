@@ -94,6 +94,7 @@ const ui = {
   notice: null,
   appliedRevision: null,
   deferredApply: false,
+  deferredApplyLocal: false,
   queue: [],
   pumping: false,
   retrying: false,
@@ -195,6 +196,11 @@ async function pump() {
           newName: intent.name,
         };
       }
+      // SAVE_SUCCESS emits synchronously inside mode.submit(). Keep that
+      // confirmed snapshot deferred until rename state has moved from the old
+      // name to the new one; otherwise render() clears the now-missing sticky
+      // selection before the post-success hook can preserve it.
+      if (succeeded) applySnapshot();
       if (succeeded) sidepadReconcileDefaultSection();
       if (succeeded && intent.kind === 'task.create') {
         ui.ambiguousTaskCreate = null;
@@ -222,24 +228,27 @@ async function pump() {
     }
   } finally {
     ui.pumping = false;
+    if (ui.deferredApply) applySnapshot({ localOperation: ui.deferredApplyLocal });
     renderChrome();
   }
 }
 
 /* ── Snapshot → popup.js ── */
 
-function applySnapshot({ force = false } = {}) {
+function applySnapshot({ force = false, localOperation = false } = {}) {
   const snapshot = mode.state.confirmed;
   if (!mode.enabled || !snapshot?.document) return;
   if (!force && snapshot.revision === ui.appliedRevision) return;
   if (sidepadServerBusy()) {
     ui.deferredApply = true;
+    ui.deferredApplyLocal ||= localOperation;
     return;
   }
   const selectDefault = ui.appliedRevision === null;
-  const remote = ui.appliedRevision !== null && !ui.pumping && !ui.retrying;
+  const remote = ui.appliedRevision !== null && !ui.pumping && !ui.retrying && !localOperation;
   ui.appliedRevision = snapshot.revision;
   ui.deferredApply = false;
+  ui.deferredApplyLocal = false;
   sidepadApplyServerTab(documentToTab(snapshot.document), {
     remote,
     selectDefault,
@@ -250,7 +259,14 @@ function applySnapshot({ force = false } = {}) {
 let lastWritable = null;
 
 function onModeChange() {
-  if (mode.enabled) applySnapshot();
+  if (mode.enabled) {
+    const hasUnappliedSnapshot = mode.state.confirmed?.revision !== ui.appliedRevision;
+    if ((ui.pumping || ui.retrying) && hasUnappliedSnapshot) {
+      ui.deferredApply = true;
+      ui.deferredApplyLocal = true;
+    }
+    else applySnapshot();
+  }
   const writable = backend.canWrite();
   if (writable !== lastWritable) {
     lastWritable = writable;
@@ -265,7 +281,7 @@ function onModeChange() {
 const poller = new VisiblePoller({
   isVisible: () => document.visibilityState === 'visible',
   async tick() {
-    if (ui.deferredApply) applySnapshot();
+    if (ui.deferredApply) applySnapshot({ localOperation: ui.deferredApplyLocal });
     if (ui.pending) {
       await refreshPending();
       if (!ui.pending) renderChrome();
@@ -487,15 +503,16 @@ async function retryAmbiguous() {
   ui.retrying = true;
   try {
     const succeeded = await mode.retryAmbiguous();
-    if (succeeded && sectionName) {
-      sidepadConfirmActiveTaskCreate(sectionName, selectionAtSubmit);
-      ui.ambiguousTaskCreate = null;
-    }
     if (succeeded && rememberedRename) {
       sidepadConfirmSectionRename(rememberedRename.oldName, rememberedRename.newName);
       ui.ambiguousSectionRename = null;
     }
+    if (succeeded) applySnapshot();
     if (succeeded) sidepadReconcileDefaultSection();
+    if (succeeded && sectionName) {
+      sidepadConfirmActiveTaskCreate(sectionName, selectionAtSubmit);
+      ui.ambiguousTaskCreate = null;
+    }
     if (mode.state.phase === 'conflict' && mode.state.conflictReason !== 'ambiguous') {
       ui.ambiguousTaskCreate = null;
       ui.ambiguousSectionRename = null;
@@ -504,6 +521,7 @@ async function retryAmbiguous() {
     }
   } finally {
     ui.retrying = false;
+    if (ui.deferredApply) applySnapshot({ localOperation: ui.deferredApplyLocal });
   }
 }
 

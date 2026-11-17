@@ -26,6 +26,40 @@ const settle = () => page.waitFor(`document.getElementById('syncState').dataset.
     throw new Error(`${error.message} ${state}`);
   });
 
+async function createServerSection(name) {
+  await page.evaluate(`__t.type('#sectionInput', ${JSON.stringify(name)})`);
+  await page.waitFor(`__t.section(${JSON.stringify(name)}) !== undefined`);
+}
+
+async function selectServerSection(name) {
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value=${JSON.stringify(name)}]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  })()`);
+}
+
+async function setSelectedAsDefault() {
+  await page.evaluate(`(() => {
+    const button = document.getElementById('defaultSectionBtn');
+    if (button.getAttribute('aria-pressed') !== 'true') button.click();
+  })()`);
+}
+
+async function clearSelectedDefault() {
+  await page.evaluate(`(() => {
+    const button = document.getElementById('defaultSectionBtn');
+    if (button.getAttribute('aria-pressed') === 'true') button.click();
+  })()`);
+}
+
+async function renameServerSection(oldName, newName) {
+  await page.evaluate(`(() => {
+    __t.section(${JSON.stringify(oldName)}).querySelector('.btn-rename-section').click();
+    __t.type('.section-rename-input', ${JSON.stringify(newName)});
+  })()`);
+}
+
 function captureConsole(session) {
   session.on('Runtime.consoleAPICalled', ({ args }) => {
     consoleLines.push(args.map((arg) => arg.value ?? arg.description ?? '').join(' '));
@@ -303,6 +337,90 @@ test('rename and delete section go through section.update and section.delete', {
   await page.evaluate(`__t.section('Ideas').querySelector('.btn-delete-section').click()`);
   await page.waitFor(`__t.section('Ideas') === undefined`);
   assert.deepEqual(op(), { type: 'section.delete', section_ref: op().section_ref, confirm: true });
+});
+
+test('confirmed server rename carries the default and sticky selection into the next quick capture', { skip }, async () => {
+  await settle();
+  await createServerSection('Rename Default Source');
+  await selectServerSection('Rename Default Source');
+  await setSelectedAsDefault();
+
+  await renameServerSection('Rename Default Source', 'Rename Default Confirmed');
+  await page.waitFor(`__t.section('Rename Default Confirmed') !== undefined`);
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_notes_api, 'Rename Default Confirmed');
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Rename Default Confirmed');
+
+  await page.evaluate(`__t.type('#taskInput', 'capture after confirmed rename')`);
+  await page.waitFor(`__t.task('capture after confirmed rename') !== undefined`);
+  assert.ok(fake.markdownModel().find(([name]) => name === 'Rename Default Confirmed')[1].includes('[ ] capture after confirmed rename'));
+  await clearSelectedDefault();
+});
+
+test('confirmed server rename preserves a sticky selected section that is not the default', { skip }, async () => {
+  await settle();
+  await createServerSection('Rename Default Anchor');
+  await selectServerSection('Rename Default Anchor');
+  await setSelectedAsDefault();
+  await createServerSection('Rename Selected Source');
+  await selectServerSection('Rename Selected Source');
+
+  await renameServerSection('Rename Selected Source', 'Rename Selected Confirmed');
+  await page.waitFor(`__t.section('Rename Selected Confirmed') !== undefined`);
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_notes_api, 'Rename Default Anchor');
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Rename Selected Confirmed');
+
+  await selectServerSection('Rename Default Anchor');
+  await clearSelectedDefault();
+});
+
+test('ambiguous server rename changes default and selection only after one exact explicit retry', { skip }, async () => {
+  await settle();
+  await createServerSection('Rename Retry Source');
+  await selectServerSection('Rename Retry Source');
+  await setSelectedAsDefault();
+  fake.failNext = { kind: 'lost-response' };
+
+  await renameServerSection('Rename Retry Source', 'Rename Retry Confirmed');
+  await page.waitFor(`document.getElementById('syncState').dataset.kind === 'retry'`);
+  const lost = fake.mutations().at(-1).body;
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_notes_api, 'Rename Retry Source');
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Rename Retry Source');
+  assert.equal(fake.mutations().filter((entry) => entry.body.operation_id === lost.operation_id).length, 1);
+
+  await page.evaluate(`[...document.querySelectorAll('.server-notice-btn')].find((button) => button.textContent === 'повторить').click()`);
+  await settle();
+  const attempts = fake.mutations().filter((entry) => entry.body.operation_id === lost.operation_id);
+  assert.equal(attempts.length, 2);
+  assert.deepEqual(attempts[1].body, attempts[0].body);
+  assert.equal(fake.sections.filter((section) => section.name === 'Rename Retry Confirmed').length, 1);
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_notes_api, 'Rename Retry Confirmed');
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Rename Retry Confirmed');
+  await clearSelectedDefault();
+});
+
+test('rejected and revision-conflicted server renames keep the confirmed default and selection', { skip }, async () => {
+  await settle();
+  await createServerSection('Rename Failure Source');
+  await selectServerSection('Rename Failure Source');
+  await setSelectedAsDefault();
+
+  fake.failNext = { kind: 'status', status: 400, code: 'validation_error' };
+  await renameServerSection('Rename Failure Source', 'Rename Rejected');
+  await page.waitFor(`document.getElementById('serverNoticeText').textContent.includes('Сервер отклонил')`);
+  await settle();
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_notes_api, 'Rename Failure Source');
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Rename Failure Source');
+  assert.equal(await page.evaluate(`__t.section('Rename Rejected')`), undefined);
+
+  fake.sections.find((section) => section.name === 'Rename Failure Source').tasks
+    .unshift({ text: 'rename conflict marker', done: false, url: null });
+  await renameServerSection('Rename Failure Source', 'Rename Conflicted');
+  await page.waitFor(`document.getElementById('serverNoticeText').textContent.includes('Документ изменился')`);
+  await settle();
+  assert.equal((await page.evaluate(`__t.storage(['sidepadDefaultSectionsV1'])`)).sidepadDefaultSectionsV1.tab_notes_api, 'Rename Failure Source');
+  assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Rename Failure Source');
+  assert.equal(await page.evaluate(`__t.section('Rename Conflicted')`), undefined);
+  await clearSelectedDefault();
 });
 
 test('rejected and revision-conflicted task creation never expands the target section', { skip }, async () => {

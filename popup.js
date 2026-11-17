@@ -878,6 +878,7 @@ document.getElementById('autoSaveBtn').addEventListener('click', async () => {
 /* ── Markdown parser ── */
 const URL_RE = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g;
 const CREATED_AT_METADATA_RE = /^<!-- notes-lab:created-at=([^\s]+) -->$/;
+const FLAGGED_METADATA_RE = /^<!-- notes-lab:flagged=true -->$/;
 
 function validCreatedAt(value) {
   if (typeof value !== 'string' || !/Z$/.test(value) || !/^\d{4}-\d{2}-\d{2}T/.test(value)) return null;
@@ -918,8 +919,17 @@ function parseMd(content, fileName) {
         continue;
       }
       if (t.startsWith('<!--')) {
-        const createdAt = metadataTaskIndex === null ? null : createdAtFromMetadata(t);
-        if (createdAt) result[metadataTaskIndex] = { ...result[metadataTaskIndex], createdAt };
+        if (metadataTaskIndex === null) continue;
+        // Notes Lab emits a contiguous per-task metadata block. Sidepad does
+        // not model flags, but a valid flag line must not detach a following
+        // created-at line from the task. Unknown or malformed metadata closes
+        // the block so timestamps cannot jump across unsupported content.
+        if (FLAGGED_METADATA_RE.test(t)) continue;
+        const createdAt = createdAtFromMetadata(t);
+        if (createdAt) {
+          result[metadataTaskIndex] = { ...result[metadataTaskIndex], createdAt };
+          continue;
+        }
         metadataTaskIndex = null;
         continue;
       }
