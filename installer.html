@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sidepad — обновление</title>
+  <link rel="stylesheet" href="installer.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon32.png" alt="" width="22" height="22">
+      <span>Sidepad</span>
+    </div>
+    <button class="quiet-button" id="langButton" type="button">RU</button>
+  </header>
+
+  <main class="installer-shell">
+    <section class="installer" aria-labelledby="pageTitle">
+      <div class="intro">
+        <h1 id="pageTitle">Обновление Sidepad</h1>
+        <p id="pageLead">Новая версия устанавливается прямо в папку распакованного расширения.</p>
+      </div>
+
+      <div class="version-line" aria-label="Версии Sidepad">
+        <div>
+          <span class="version-label" id="currentLabel">Сейчас</span>
+          <strong id="currentVersion">—</strong>
+        </div>
+        <span class="version-arrow" aria-hidden="true">→</span>
+        <div class="version-target">
+          <span class="version-label" id="latestLabel">Релиз</span>
+          <strong id="latestVersion">проверяем…</strong>
+        </div>
+      </div>
+
+      <div class="folder-row">
+        <div class="folder-copy">
+          <span class="folder-label" id="folderLabel">Папка установки</span>
+          <span class="folder-name" id="folderName">не выбрана</span>
+        </div>
+        <button class="secondary-button" id="folderButton" type="button">Выбрать</button>
+      </div>
+
+      <ol class="steps" aria-label="Ход обновления">
+        <li data-step="folder"><span class="step-mark"></span><span id="stepFolder">Проверить папку</span></li>
+        <li data-step="download"><span class="step-mark"></span><span id="stepDownload">Загрузить файлы релиза</span></li>
+        <li data-step="verify"><span class="step-mark"></span><span id="stepVerify">Проверить пакет</span></li>
+        <li data-step="install"><span class="step-mark"></span><span id="stepInstall">Установить и перезапустить</span></li>
+      </ol>
+
+      <p class="status" id="status" role="status" aria-live="polite">Проверяем последний релиз…</p>
+
+      <div class="actions">
+        <button class="primary-button" id="installButton" type="button" disabled>Установить обновление</button>
+        <a class="text-link" id="releaseLink" href="https://github.com/GitFreeb/sidepad-extension/releases/latest" target="_blank" rel="noopener">Открыть релиз на GitHub</a>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="installer.js"></script>
+</body>
+</html>

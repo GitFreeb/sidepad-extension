@@ -86,7 +86,7 @@ The default legacy mode requires no registration and sends task data only to fil
 
 ## Installation
 
-1. Download or clone the repository
+1. Download a release or clone the repository. For built-in updates, keep the installed copy in a separate permanent folder such as `sidepad-installed/`
 2. Open in Chrome: `chrome://extensions`
 3. Enable **Developer mode** (toggle in the top right corner)
 4. Click **Load unpacked**
@@ -94,6 +94,12 @@ The default legacy mode requires no registration and sends task data only to fil
 6. Click the extension icon in the Chrome toolbar — the side panel will open
 
 > After changing extension files, click the reload button on the extension card in `chrome://extensions`, then close and reopen the side panel.
+
+### Updating the unpacked version
+
+Sidepad checks the latest stable GitHub Release at most once a day. The new-version banner opens the bundled installer instead of the repository page. On the first update, choose the permanent folder loaded in `chrome://extensions`; Sidepad remembers that access and updates it directly next time. Every file is downloaded and verified in memory first, so no archives remain in Downloads. After a successful write the extension reloads itself.
+
+Do not select a working Git checkout: the updater replaces runtime files with the released version. If you move an existing unpacked extension to a new folder, export local lists first—Chrome assigns a different ID to the new path and does not automatically migrate its `chrome.storage.local` data.
 
 ---
 

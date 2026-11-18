@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    "background.js",
+    "default.md",
+    "example.md",
+    "icons/icon16.png",
+    "icons/icon32.png",
+    "icons/icon48.png",
+    "icons/icon128.png",
+    "installer-core.js",
+    "installer.css",
+    "installer.html",
+    "installer.js",
+    "manifest.json",
+    "notes-api-auth.js",
+    "notes-api-client.js",
+    "notes-api-connect.js",
+    "notes-api-mode.js",
+    "notes-api-state.js",
+    "notes-api-sync.js",
+    "notes-api-tab.js",
+    "popup-api.js",
+    "popup.css",
+    "popup.html",
+    "popup.js",
+    "sidepad-package.json"
+  ]
+}

@@ -96,7 +96,9 @@ FEATURES
 
 INSTALLATION
 ------------
-1. Download or clone the repository
+1. Download a release or clone the repository. For built-in updates,
+   keep the installed copy in a separate permanent folder such as
+   sidepad-installed/
 2. Open in Chrome: chrome://extensions
 3. Enable Developer mode (toggle in the top right corner)
 4. Click "Load unpacked"
@@ -107,6 +109,21 @@ INSTALLATION
   Note: After changing extension files, click the reload button on
   the extension card in chrome://extensions, then close and reopen
   the side panel.
+
+
+UPDATING THE UNPACKED VERSION
+-----------------------------
+Sidepad checks the latest stable GitHub Release at most once a day.
+The new-version banner opens the bundled installer. On the first update,
+choose the permanent folder loaded in chrome://extensions; Sidepad
+remembers that access and updates it directly next time. Files are
+downloaded and verified in memory, no archives remain in Downloads, and
+the extension reloads itself after installation.
+
+Do not select a working Git checkout: the updater replaces runtime files
+with the released version. When moving an existing installation to a new
+folder, export local lists first—the new path gives the extension a new ID
+and chrome.storage.local is not migrated automatically.
 
 
 QUICK START
