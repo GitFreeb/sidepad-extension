@@ -100,6 +100,74 @@ test('keeps the successful target selected for rapid task capture', { skip }, as
   assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Named');
 });
 
+test('section selection reveals its header at the top and shades only its content', { skip }, async () => {
+  const alphaTasks = Array.from({ length: 18 }, (_, index) => `alpha ${index + 1}`);
+  await reloadWithStorage(page, {
+    tabs: [legacyTab('tab_navigation', 'navigation', [
+      ['Alpha', alphaTasks],
+      ['Beta', ['beta one', 'beta two']],
+    ])],
+    activeTabId: 'tab_navigation',
+  });
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 640, deviceScaleFactor: 1, mobile: false });
+
+  await page.evaluate(`(() => {
+    __t.section('Beta').click();
+    const list = document.getElementById('taskList');
+    list.scrollTop = 0;
+    document.getElementById('taskInput').value = 'draft task';
+    document.getElementById('linkInput').value = 'https://example.test/draft';
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Beta"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  })()`);
+  await new Promise((resolve) => setTimeout(resolve, 900));
+
+  const state = await page.evaluate(`(() => {
+    const list = document.getElementById('taskList');
+    const header = __t.section('Beta');
+    const otherHeader = __t.section('Alpha');
+    const group = header.closest('.section-group');
+    const listStyle = getComputedStyle(list);
+    const headerStyle = getComputedStyle(header);
+    const expectedTop = list.getBoundingClientRect().top
+      + parseFloat(listStyle.paddingTop)
+      + parseFloat(headerStyle.top);
+    const content = [...group.querySelectorAll('.task-item, .section-empty')];
+    const probe = document.createElement('span');
+    probe.style.background = 'var(--section-target-bg)';
+    document.body.append(probe);
+    const targetBackground = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return {
+      topDelta: Math.abs(header.getBoundingClientRect().top - expectedTop),
+      collapsed: header.classList.contains('collapsed'),
+      targetGroups: document.querySelectorAll('.section-group.section-picker-target').length,
+      groupTargeted: group.classList.contains('section-picker-target'),
+      headerTargeted: header.classList.contains('section-picker-target'),
+      headerBackground: headerStyle.backgroundColor,
+      otherHeaderBackground: getComputedStyle(otherHeader).backgroundColor,
+      contentBackgrounds: content.map((item) => getComputedStyle(item).backgroundColor),
+      targetBackground,
+      taskDraft: document.getElementById('taskInput').value,
+      linkDraft: document.getElementById('linkInput').value,
+    };
+  })()`);
+
+  assert.ok(state.topDelta <= 1.5, `selected section header missed the top by ${state.topDelta}px`);
+  assert.equal(state.collapsed, false);
+  assert.equal(state.targetGroups, 1);
+  assert.equal(state.groupTargeted, true);
+  assert.equal(state.headerTargeted, false);
+  assert.equal(state.headerBackground, state.otherHeaderBackground);
+  assert.deepEqual(state.contentBackgrounds, [state.targetBackground, state.targetBackground]);
+  assert.equal(state.taskDraft, 'draft task');
+  assert.equal(state.linkDraft, 'https://example.test/draft');
+  assert.deepEqual((await model())[1].tasks, ['[ ] beta one', '[ ] beta two']);
+
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});
+
 test('stores an explicit default section per file tab without replacing sticky selection', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.evaluate(`(() => {

@@ -254,7 +254,7 @@ test('successful task creation keeps its server target selected for rapid captur
   assert.ok(fake.mutations().every((entry) => entry.authorized && !('document' in entry.body) && !('markdown' in entry.body)));
 });
 
-test('confirmed active task creation expands only its collapsed target', { skip }, async () => {
+test('selecting a server task target expands only that section before confirmed creation', { skip }, async () => {
   await settle();
   const serverOrder = fake.markdownModel().map(([name]) => name);
   await page.evaluate(`(() => {
@@ -263,8 +263,13 @@ test('confirmed active task creation expands only its collapsed target', { skip 
     __t.click('#sectionSelect');
     [...document.querySelectorAll('#sectionSelectList .csel-item')].find((li) => li.dataset.value === 'Work')
       .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    __t.type('#taskInput', 'visible after confirmation');
   })()`);
+
+  const afterSelection = await model();
+  assert.equal(afterSelection.find((section) => section.name === 'Inbox').collapsed, true);
+  assert.equal(afterSelection.find((section) => section.name === 'Work').collapsed, false);
+
+  await page.evaluate(`__t.type('#taskInput', 'visible after confirmation')`);
   await page.waitFor(`__t.task('visible after confirmation') !== undefined`);
 
   const current = await model();
@@ -423,7 +428,7 @@ test('rejected and revision-conflicted server renames keep the confirmed default
   await clearSelectedDefault();
 });
 
-test('rejected and revision-conflicted task creation never expands the target section', { skip }, async () => {
+test('rejected and revision-conflicted task creation keeps the selected target expanded without mutating it', { skip }, async () => {
   await settle();
   await page.evaluate(`(() => {
     __t.section('Work').click();
@@ -436,7 +441,7 @@ test('rejected and revision-conflicted task creation never expands the target se
   await page.evaluate(`__t.type('#taskInput', 'rejected capture')`);
   await page.waitFor(`document.getElementById('serverNoticeText').textContent.includes('Сервер отклонил')`);
   await settle();
-  assert.equal((await model()).find((section) => section.name === 'Work').collapsed, true);
+  assert.equal((await model()).find((section) => section.name === 'Work').collapsed, false);
   assert.equal(fake.markdownModel().find(([name]) => name === 'Work')[1].includes('[ ] rejected capture'), false);
 
   fake.sections.find((section) => section.name === 'Work').tasks.unshift({ text: 'remote conflict marker', done: false, url: null });
@@ -448,10 +453,8 @@ test('rejected and revision-conflicted task creation never expands the target se
   })()`);
   await page.waitFor(`document.getElementById('serverNoticeText').textContent.includes('Документ изменился')`);
   await settle();
-  assert.equal((await model()).find((section) => section.name === 'Work').collapsed, true);
+  assert.equal((await model()).find((section) => section.name === 'Work').collapsed, false);
   assert.equal(fake.markdownModel().find(([name]) => name === 'Work')[1].includes('[ ] conflicted capture'), false);
-  await page.evaluate(`__t.section('Work').click()`);
-  await new Promise((resolve) => setTimeout(resolve, 900));
 });
 
 test('a revision conflict rereads the document without replaying the operation', { skip }, async () => {
@@ -500,7 +503,7 @@ test('503 trash_recovery_blocked keeps task creation ambiguous until exact manua
 
   const beforeRetry = await model();
   assert.equal(beforeRetry.find((section) => section.name === 'Inbox').collapsed, true);
-  assert.equal(beforeRetry.find((section) => section.name === 'Work').collapsed, true);
+  assert.equal(beforeRetry.find((section) => section.name === 'Work').collapsed, false);
   await new Promise((resolve) => setTimeout(resolve, 2500));
   assert.equal(fake.mutations().filter((entry) => entry.body.operation_id === blocked.operation_id).length, 1);
 
