@@ -266,6 +266,38 @@ test('toggle moves a finished task to the end and a reopened task to the top', {
   assert.equal(await page.evaluate(`document.getElementById('counter').textContent`), '1 / 4');
 });
 
+test('checkbox click tolerates small pointer movement without starting task drag', { skip }, async () => {
+  await reloadWithStorage(page, seed());
+  await page.evaluate(`(() => {
+    window.__taskDragStarts = 0;
+    document.getElementById('taskList').addEventListener('dragstart', (event) => {
+      if (event.target.closest('.task-item')) window.__taskDragStarts += 1;
+    });
+  })()`);
+  const point = await page.evaluate(`(() => {
+    const rect = __t.task('one').querySelector('.task-checkbox').getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`);
+
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed', x: point.x, y: point.y, button: 'left', buttons: 1, clickCount: 1,
+  });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved', x: point.x + 3, y: point.y, button: 'left', buttons: 1,
+  });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased', x: point.x + 3, y: point.y, button: 'left', buttons: 0, clickCount: 1,
+  });
+
+  await page.waitFor(`__t.model()[0].tasks.includes('[x] one')`);
+  assert.equal(await page.evaluate('window.__taskDragStarts'), 0);
+  assert.deepEqual(await page.evaluate(`(() => {
+    const task = __t.task('one');
+    return { row: task.draggable, handle: task.querySelector('.drag-handle').draggable };
+  })()`), { row: false, handle: true });
+});
+
 test('a section whose tasks are all done collapses automatically', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.evaluate(`__t.task('four').querySelector('.task-checkbox').click()`);
@@ -303,15 +335,15 @@ test('move menu sends a task to the top of another section', { skip }, async () 
 
 test('drag and drop reorders tasks, moves them between sections and reorders sections', { skip }, async () => {
   await reloadWithStorage(page, seed());
-  await page.evaluate(`__t.drag(__t.task('one'), __t.task('two'), 'after')`);
+  await page.evaluate(`__t.drag(__t.task('one').querySelector('.drag-handle'), __t.task('two'), 'after')`);
   assert.deepEqual((await model())[0].tasks, ['[ ] two', '[ ] one', '[x] three']);
 
-  await page.evaluate(`__t.drag(__t.task('two'), __t.task('four'), 'after')`);
+  await page.evaluate(`__t.drag(__t.task('two').querySelector('.drag-handle'), __t.task('four'), 'after')`);
   let current = await model();
   assert.deepEqual(current[0].tasks, ['[ ] one', '[x] three']);
   assert.deepEqual(current[1].tasks, ['[ ] four', '[ ] two']);
 
-  await page.evaluate(`__t.drag(__t.task('four'), __t.section('Alpha'))`);
+  await page.evaluate(`__t.drag(__t.task('four').querySelector('.drag-handle'), __t.section('Alpha'))`);
   current = await model();
   assert.deepEqual(current[0].tasks, ['[ ] one', '[x] three', '[ ] four']);
 
