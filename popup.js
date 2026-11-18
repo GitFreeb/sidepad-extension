@@ -1547,9 +1547,12 @@ function scrollSectionToTop(section) {
 
   const listStyle = getComputedStyle(list);
   const headerStyle = getComputedStyle(header);
+  const body = header.closest('.section-body');
+  const bodyStyle = getComputedStyle(body);
   const group = header.closest('.section-group');
   const stickyTop = (parseFloat(listStyle.paddingTop) || 0) + (parseFloat(headerStyle.top) || 0);
   const offset = group.getBoundingClientRect().top - list.getBoundingClientRect().top
+    + (parseFloat(bodyStyle.marginTop) || 0)
     + (parseFloat(headerStyle.marginTop) || 0) - stickyTop;
   const targetTop = Math.max(0, list.scrollTop + offset);
   const maxTop = Math.max(0, list.scrollHeight - list.clientHeight);

@@ -147,8 +147,8 @@ test('enabling Notes API opens the connect page, keeps the legacy UI and offers 
     expanded: 'true',
     text: '',
     borderWidth: '0px',
-    width: 28,
-    iconWidth: 20,
+    width: 32,
+    iconWidth: 29,
   });
   await page.evaluate(`__t.click('#apiSettingsBtn')`);
   assert.equal(await page.evaluate(`document.getElementById('apiSettingsBtn').getAttribute('aria-expanded')`), 'false');
