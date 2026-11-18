@@ -702,6 +702,40 @@ body {
 
 .csel-item.active { color: var(--accent); }
 
+.csel-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csel-item-meta,
+.csel-counts,
+.csel-count {
+  display: inline-flex;
+  align-items: center;
+}
+
+.csel-item-meta {
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.csel-counts {
+  gap: 7px;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.csel-count { gap: 3px; }
+.csel-count::before { line-height: 1; }
+.csel-count-open::before { content: '○'; }
+.csel-count-done::before { content: '✓'; }
+
+.csel-item:hover .csel-counts,
+.csel-item.focused .csel-counts { color: var(--text-muted); }
+
 .csel-default-mark {
   flex-shrink: 0;
   color: var(--accent);

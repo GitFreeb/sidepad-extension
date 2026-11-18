@@ -167,6 +167,15 @@ test('web probe and pair connect Sidepad through the service worker only', { ski
     { name: 'Inbox', collapsed: false, tasks: ['[ ] first', '[ ] second', '[x] closed'] },
     { name: 'Work', collapsed: false, tasks: ['[ ] report'] },
   ]);
+  assert.deepEqual(await page.evaluate(`Object.fromEntries(
+    [...document.querySelectorAll('#sectionSelectList .csel-item')].map((item) => [item.dataset.value, {
+      open: Number(item.querySelector('.csel-count-open').textContent),
+      done: Number(item.querySelector('.csel-count-done').textContent),
+    }])
+  )`), {
+    Inbox: { open: 2, done: 1 },
+    Work: { open: 1, done: 0 },
+  });
   assert.equal(await page.evaluate(`document.querySelector('.bc-path').textContent`), 'notes.lab/');
   assert.equal(await page.evaluate(`document.getElementById('syncState').textContent`), '✓');
 });
