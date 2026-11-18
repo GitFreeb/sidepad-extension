@@ -20,6 +20,7 @@
   --scrollbar:     #3a3a3c;
   --tab-bg:        #1c1c1e;
   --tab-active:    #2c2c2e;
+  --section-target-bg: rgba(255, 255, 255, 0.045);
 
   --radius: 6px;
   --font-ui:   -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -47,6 +48,7 @@
   --scrollbar:     #cdc6b4;
   --tab-bg:        #ede8da;
   --tab-active:    #f5f0e6;
+  --section-target-bg: rgba(72, 96, 58, 0.06);
 }
 
 [data-theme="light"] .task-text {
@@ -982,6 +984,23 @@ body {
 .task-item:hover {
   background: var(--hover);
   border-left-color: var(--accent-dim);
+}
+
+/* Выбранная в форме секция: спокойная подложка только под содержимым.
+   Заголовок остаётся визуально идентичным остальным секциям. */
+.section-group.section-picker-target .task-item,
+.section-group.section-picker-target .section-empty {
+  background: var(--section-target-bg);
+}
+
+.section-group.section-picker-target .task-item:hover {
+  background: var(--hover);
+}
+
+.section-scroll-spacer {
+  height: 0;
+  list-style: none;
+  pointer-events: none;
 }
 
 .task-item.done .task-text {

@@ -312,7 +312,7 @@ let editingId = null;
 let renamingTabId       = null;
 let renamingSection     = null;
 let moveMenuTaskId      = null;
-let justExpandedSection = null;
+let pendingSectionReveal = null;
 let selectedSection = null;
 let allCollapsed = false;
 
@@ -1536,6 +1536,32 @@ function formatCreatedAt(value, { long = false } = {}) {
     : { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
+function scrollSectionToTop(section) {
+  const list = document.getElementById('taskList');
+  const header = [...list.querySelectorAll('.section-header')]
+    .find(item => item.dataset.section === section);
+  if (!header) return;
+
+  const spacer = list.querySelector('.section-scroll-spacer');
+  if (spacer) spacer.style.height = '0px';
+
+  const listStyle = getComputedStyle(list);
+  const headerStyle = getComputedStyle(header);
+  const group = header.closest('.section-group');
+  const stickyTop = (parseFloat(listStyle.paddingTop) || 0) + (parseFloat(headerStyle.top) || 0);
+  const offset = group.getBoundingClientRect().top - list.getBoundingClientRect().top
+    + (parseFloat(headerStyle.marginTop) || 0) - stickyTop;
+  const targetTop = Math.max(0, list.scrollTop + offset);
+  const maxTop = Math.max(0, list.scrollHeight - list.clientHeight);
+
+  // Последней короткой секции не хватает естественного scroll range, чтобы
+  // её заголовок встал у верхней границы. Добавляем ровно недостающий воздух.
+  if (spacer && targetTop > maxTop) spacer.style.height = `${targetTop - maxTop}px`;
+
+  const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  list.scrollTo({ top: targetTop, behavior });
+}
+
 function render() {
   const list    = document.getElementById('taskList');
   const counter = document.getElementById('counter');
@@ -1551,7 +1577,7 @@ function render() {
   serverBackend?.renderChrome();
 
   if (!tasks.length && !sections.length) {
-    justExpandedSection = null;
+    pendingSectionReveal = null;
     updateSectionSelect();
     const isDefault = getActiveTab()?.title === 'default';
     list.innerHTML = `<div class="empty-msg">
@@ -1587,7 +1613,7 @@ function render() {
 
     // Своя обёртка у каждой секции ограничивает липкую плашку её секцией:
     // следующая плашка вытесняет предыдущую, а не ложится на неё стопкой.
-    html += `<li class="section-group"><ul class="section-body">`;
+    html += `<li class="section-group${title === selectedSection ? ' section-picker-target' : ''}"><ul class="section-body">`;
     html += `<li class="section-header${isCollapsed ? ' collapsed' : ''}${pinned ? ' inbox' : ''}" data-section="${escapeHtml(title)}" data-action="toggle-section" draggable="${isRenaming || readOnly || pinned ? 'false' : 'true'}">
       ${isRenaming
         ? `<input class="section-rename-input" data-rename-section="${escapeHtml(title)}" value="${escapeHtml(title)}" maxlength="${isServerTab() ? SERVER_SECTION_MAX : 80}" draggable="false">`
@@ -1647,6 +1673,8 @@ function render() {
     html += `</ul></li>`;
   });
 
+  html += '<li class="section-scroll-spacer" aria-hidden="true"></li>';
+
   list.innerHTML = html;
   updateSectionSelect();
 
@@ -1669,22 +1697,10 @@ function render() {
     if (inp) { inp.focus(); inp.select(); }
   }
 
-  if (justExpandedSection !== null) {
-    const sec = justExpandedSection;
-    justExpandedSection = null;
-    for (const h of list.querySelectorAll('.section-header')) {
-      if (h.dataset.section === sec) {
-        // scrollIntoView считает прилипшую плашку уже «на месте» и не
-        // прокручивает, оставляя первые задачи скрытыми под ней. Прокручиваем
-        // по обёртке секции так, чтобы плашка встала ровно в липкую позицию.
-        const group     = h.closest('.section-group');
-        const stickyTop = parseFloat(getComputedStyle(list).paddingTop) + parseFloat(getComputedStyle(h).top);
-        const offset    = group.getBoundingClientRect().top - list.getBoundingClientRect().top
-                        + parseFloat(getComputedStyle(h).marginTop) - stickyTop;
-        list.scrollTo({ top: list.scrollTop + offset, behavior: 'smooth' });
-        break;
-      }
-    }
+  if (pendingSectionReveal !== null) {
+    const section = pendingSectionReveal;
+    pendingSectionReveal = null;
+    scrollSectionToTop(section);
   }
 }
 
@@ -1745,7 +1761,7 @@ document.getElementById('taskList').addEventListener('click', (e) => {
     const title = sectionEl.dataset.section;
     if (collapsedSections.has(title)) {
       collapsedSections.delete(title);
-      justExpandedSection = title;
+      pendingSectionReveal = title;
     } else {
       collapsedSections.add(title);
     }
@@ -1857,7 +1873,14 @@ document.getElementById('taskList').addEventListener('focusout', (e) => {
 });
 
 /* ── Custom section select ── */
-function setSection(s) {
+function syncSectionTargetHighlight() {
+  document.querySelectorAll('#taskList .section-group').forEach(group => {
+    const header = group.querySelector('.section-header');
+    group.classList.toggle('section-picker-target', header?.dataset.section === selectedSection);
+  });
+}
+
+function setSection(s, { reveal = false } = {}) {
   selectedSection = s;
   const valEl = document.getElementById('sectionSelectVal');
   if (valEl) valEl.textContent = s === null ? tr('selectSectionPlaceholder') : s;
@@ -1867,6 +1890,17 @@ function setSection(s) {
     li.classList.remove('focused');
   });
   updateDefaultSectionButton();
+  syncSectionTargetHighlight();
+
+  if (reveal && s !== null) {
+    collapsedSections.delete(s);
+    if (allCollapsed) {
+      allCollapsed = false;
+      updateCollapseBtn();
+    }
+    pendingSectionReveal = s;
+    render();
+  }
 }
 
 function openCsel() {
@@ -1911,7 +1945,7 @@ function updateSectionSelect() {
       li.appendChild(mark);
     }
     li.dataset.value = s;
-    li.addEventListener('mousedown', (e) => { e.preventDefault(); setSection(s); closeCsel(); });
+    li.addEventListener('mousedown', (e) => { e.preventDefault(); setSection(s, { reveal: true }); closeCsel(); });
     list.appendChild(li);
   });
   const valEl = document.getElementById('sectionSelectVal');
@@ -2026,7 +2060,7 @@ document.getElementById('sectionSelect').addEventListener('keydown', e => {
     e.preventDefault();
     if (isOpen) {
       const focused = csel.querySelector('.csel-item.focused');
-      if (focused) setSection(focused.dataset.value);
+      if (focused) setSection(focused.dataset.value, { reveal: true });
       closeCsel();
     } else {
       addTask();
@@ -2037,7 +2071,7 @@ document.getElementById('sectionSelect').addEventListener('keydown', e => {
     e.preventDefault();
     if (isOpen) {
       const focused = csel.querySelector('.csel-item.focused');
-      if (focused) { setSection(focused.dataset.value); closeCsel(); }
+      if (focused) { setSection(focused.dataset.value, { reveal: true }); closeCsel(); }
     } else {
       openCsel();
     }
