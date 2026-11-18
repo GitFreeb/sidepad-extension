@@ -54,6 +54,29 @@ test('renders sections, tasks and counter from the active file tab', { skip }, a
   assert.equal(await page.evaluate(`document.getElementById('apiModeToggle').checked`), false);
 });
 
+test('section picker shows and refreshes open and done task counts', { skip }, async () => {
+  await reloadWithStorage(page, seed());
+  const pickerCounts = () => page.evaluate(`Object.fromEntries(
+    [...document.querySelectorAll('#sectionSelectList .csel-item')].map((item) => [item.dataset.value, {
+      open: Number(item.querySelector('.csel-count-open').textContent),
+      done: Number(item.querySelector('.csel-count-done').textContent),
+      title: item.querySelector('.csel-counts').title,
+    }])
+  )`);
+
+  assert.deepEqual(await pickerCounts(), {
+    Alpha: { open: 2, done: 1, title: 'Незакрытых: 2 · закрытых: 1' },
+    Beta: { open: 1, done: 0, title: 'Незакрытых: 1 · закрытых: 0' },
+  });
+
+  await page.evaluate(`__t.task('one').querySelector('.task-checkbox').click()`);
+  assert.deepEqual((await pickerCounts()).Alpha, {
+    open: 1,
+    done: 2,
+    title: 'Незакрытых: 1 · закрытых: 2',
+  });
+});
+
 test('keeps the successful target selected for rapid task capture', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.evaluate(`(() => {

@@ -9,6 +9,7 @@ const I18N = {
     defaultSectionSetTitle:   'Назначить выбранную секцию по умолчанию',
     defaultSectionResetTitle: 'Сбросить секцию по умолчанию',
     defaultSectionMarkTitle:  'Секция по умолчанию',
+    sectionTaskCountsTitle:   'Незакрытых: {open} · закрытых: {done}',
     autoSectionBase:          'Новая секция',
     emptyList:          'Нет задач. Добавьте первую!',
     loadExample:        'Загрузить пример →',
@@ -103,6 +104,7 @@ const I18N = {
     defaultSectionSetTitle:   'Set selected section as default',
     defaultSectionResetTitle: 'Clear default section',
     defaultSectionMarkTitle:  'Default section',
+    sectionTaskCountsTitle:   'Open: {open} · done: {done}',
     autoSectionBase:          'New section',
     emptyList:          'No tasks. Add the first one!',
     loadExample:        'Load example →',
@@ -1926,23 +1928,48 @@ function updateSectionSelect() {
   const allSections = pinInbox([...new Set([...sections, ...fromTasks])]);
   if (selectedSection !== null && !allSections.includes(selectedSection)) selectedSection = null;
   const preferred = defaultSectionFor();
+  const countsBySection = new Map(allSections.map(section => [section, { open: 0, done: 0 }]));
+  tasks.forEach(task => {
+    const counts = countsBySection.get(task.section);
+    if (counts) counts[task.done ? 'done' : 'open'] += 1;
+  });
   list.innerHTML = '';
   allSections.forEach(s => {
+    const counts = countsBySection.get(s) || { open: 0, done: 0 };
+    const countsTitle = tr('sectionTaskCountsTitle')
+      .replace('{open}', String(counts.open))
+      .replace('{done}', String(counts.done));
     const li = document.createElement('li');
     li.className = 'csel-item' + (s === selectedSection ? ' active' : '') + (s === preferred ? ' default' : '');
     li.setAttribute('role', 'option');
     li.setAttribute('aria-selected', String(s === selectedSection));
     const label = document.createElement('span');
+    label.className = 'csel-item-label';
     label.textContent = s;
     li.appendChild(label);
+    const meta = document.createElement('span');
+    meta.className = 'csel-item-meta';
+    const countGroup = document.createElement('span');
+    countGroup.className = 'csel-counts';
+    countGroup.title = countsTitle;
+    countGroup.setAttribute('aria-label', countsTitle);
+    const openCount = document.createElement('span');
+    openCount.className = 'csel-count csel-count-open';
+    openCount.textContent = String(counts.open);
+    const doneCount = document.createElement('span');
+    doneCount.className = 'csel-count csel-count-done';
+    doneCount.textContent = String(counts.done);
+    countGroup.append(openCount, doneCount);
+    meta.appendChild(countGroup);
     if (s === preferred) {
       const mark = document.createElement('span');
       mark.className = 'csel-default-mark';
       mark.textContent = '★';
       mark.title = tr('defaultSectionMarkTitle');
       mark.setAttribute('aria-label', tr('defaultSectionMarkTitle'));
-      li.appendChild(mark);
+      meta.appendChild(mark);
     }
+    li.appendChild(meta);
     li.dataset.value = s;
     li.addEventListener('mousedown', (e) => { e.preventDefault(); setSection(s, { reveal: true }); closeCsel(); });
     list.appendChild(li);
