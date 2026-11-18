@@ -54,26 +54,26 @@ test('renders sections, tasks and counter from the active file tab', { skip }, a
   assert.equal(await page.evaluate(`document.getElementById('apiModeToggle').checked`), false);
 });
 
-test('section picker shows and refreshes open and done task counts', { skip }, async () => {
+test('section picker shows and refreshes incomplete over total task counts', { skip }, async () => {
   await reloadWithStorage(page, seed());
   const pickerCounts = () => page.evaluate(`Object.fromEntries(
     [...document.querySelectorAll('#sectionSelectList .csel-item')].map((item) => [item.dataset.value, {
-      open: Number(item.querySelector('.csel-count-open').textContent),
-      done: Number(item.querySelector('.csel-count-done').textContent),
-      title: item.querySelector('.csel-counts').title,
+      value: item.querySelector('.csel-count').textContent,
+      title: item.querySelector('.csel-count').title,
+      children: item.querySelector('.csel-count').childElementCount,
     }])
   )`);
 
   assert.deepEqual(await pickerCounts(), {
-    Alpha: { open: 2, done: 1, title: 'Незакрытых: 2 · закрытых: 1' },
-    Beta: { open: 1, done: 0, title: 'Незакрытых: 1 · закрытых: 0' },
+    Alpha: { value: '2/3', title: 'Незавершённых: 2 из 3', children: 0 },
+    Beta: { value: '1/1', title: 'Незавершённых: 1 из 1', children: 0 },
   });
 
   await page.evaluate(`__t.task('one').querySelector('.task-checkbox').click()`);
   assert.deepEqual((await pickerCounts()).Alpha, {
-    open: 1,
-    done: 2,
-    title: 'Незакрытых: 1 · закрытых: 2',
+    value: '1/3',
+    title: 'Незавершённых: 1 из 3',
+    children: 0,
   });
 });
 
