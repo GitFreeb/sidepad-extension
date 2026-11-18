@@ -144,25 +144,25 @@ body {
 
 .modebar-icon-btn {
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 30px;
   align-items: center;
   justify-content: center;
   margin-right: 6px;
-  padding: 4px;
+  padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--text-muted);
   transition: color 0.15s, background 0.15s;
 }
 
 .modebar-icon-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 29px;
+  height: 29px;
   overflow: visible;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: 2.15;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -938,15 +938,26 @@ body {
   margin: 0 10px;
 }
 
-.section-group.section-picker-target .section-content {
+/* Подложка лежит под всей выбранной секцией, включая скругления заголовка. */
+.section-group.section-picker-target .section-body {
+  margin: 8px 10px 0;
   background: var(--section-target-bg);
 }
 
 .section-group.section-picker-target .section-header {
-  margin-bottom: 0;
+  margin: 0;
 }
 
-/* Подложка выбранной секции заканчивается ровно у следующей плашки. */
+.section-group.section-picker-target .section-content {
+  margin-inline: 0;
+}
+
+/* Короткий подслой закрывает верхние скругления следующей плашки. */
+.section-group.section-picker-target + .section-group .section-body {
+  background: linear-gradient(var(--section-target-bg), var(--section-target-bg))
+    no-repeat 10px 0 / calc(100% - 20px) calc(var(--radius) + 1px);
+}
+
 .section-group.section-picker-target + .section-group .section-header {
   margin-top: 0;
 }

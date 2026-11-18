@@ -153,7 +153,9 @@ test('section selection reveals its header at the top and shades one flush conte
     const otherHeader = __t.section('Alpha');
     const nextHeader = __t.section('Gamma');
     const group = header.closest('.section-group');
-    const canvas = group.querySelector('.section-content');
+    const canvas = group.querySelector('.section-body');
+    const contentCanvas = group.querySelector('.section-content');
+    const nextBody = nextHeader.closest('.section-body');
     const listStyle = getComputedStyle(list);
     const headerStyle = getComputedStyle(header);
     const expectedTop = list.getBoundingClientRect().top
@@ -174,11 +176,14 @@ test('section selection reveals its header at the top and shades one flush conte
       headerBackground: headerStyle.backgroundColor,
       otherHeaderBackground: getComputedStyle(otherHeader).backgroundColor,
       canvasBackground: getComputedStyle(canvas).backgroundColor,
+      contentCanvasBackground: getComputedStyle(contentCanvas).backgroundColor,
+      nextHeaderUnderlay: getComputedStyle(nextBody).backgroundImage,
       contentBackgrounds: content.map((item) => getComputedStyle(item).backgroundColor),
       targetBackground,
       leftDelta: Math.abs(canvas.getBoundingClientRect().left - header.getBoundingClientRect().left),
       rightDelta: Math.abs(canvas.getBoundingClientRect().right - header.getBoundingClientRect().right),
-      topGap: Math.abs(canvas.getBoundingClientRect().top - header.getBoundingClientRect().bottom),
+      headerUnderlayGap: Math.abs(canvas.getBoundingClientRect().top - header.getBoundingClientRect().top),
+      topGap: Math.abs(contentCanvas.getBoundingClientRect().top - header.getBoundingClientRect().bottom),
       bottomGap: Math.abs(nextHeader.getBoundingClientRect().top - canvas.getBoundingClientRect().bottom),
       taskDraft: document.getElementById('taskInput').value,
       linkDraft: document.getElementById('linkInput').value,
@@ -192,9 +197,12 @@ test('section selection reveals its header at the top and shades one flush conte
   assert.equal(state.headerTargeted, false);
   assert.equal(state.headerBackground, state.otherHeaderBackground);
   assert.equal(state.canvasBackground, state.targetBackground);
+  assert.equal(state.contentCanvasBackground, 'rgba(0, 0, 0, 0)');
+  assert.notEqual(state.nextHeaderUnderlay, 'none');
   assert.ok(state.contentBackgrounds.every((background) => background === 'rgba(0, 0, 0, 0)'));
   assert.ok(state.leftDelta <= 1, `content canvas starts ${state.leftDelta}px away from the header`);
   assert.ok(state.rightDelta <= 1, `content canvas ends ${state.rightDelta}px away from the header`);
+  assert.ok(state.headerUnderlayGap <= 1, `content canvas starts ${state.headerUnderlayGap}px below the header top`);
   assert.ok(state.topGap <= 1, `content canvas starts ${state.topGap}px below the header`);
   assert.ok(state.bottomGap <= 1, `content canvas ends ${state.bottomGap}px before the next header`);
   assert.equal(state.taskDraft, 'draft task');
