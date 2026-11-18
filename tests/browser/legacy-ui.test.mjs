@@ -123,12 +123,13 @@ test('keeps the successful target selected for rapid task capture', { skip }, as
   assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Named');
 });
 
-test('section selection reveals its header at the top and shades only its content', { skip }, async () => {
+test('section selection reveals its header at the top and shades one flush content canvas', { skip }, async () => {
   const alphaTasks = Array.from({ length: 18 }, (_, index) => `alpha ${index + 1}`);
   await reloadWithStorage(page, {
     tabs: [legacyTab('tab_navigation', 'navigation', [
       ['Alpha', alphaTasks],
       ['Beta', ['beta one', 'beta two']],
+      ['Gamma', ['gamma one']],
     ])],
     activeTabId: 'tab_navigation',
   });
@@ -150,7 +151,9 @@ test('section selection reveals its header at the top and shades only its conten
     const list = document.getElementById('taskList');
     const header = __t.section('Beta');
     const otherHeader = __t.section('Alpha');
+    const nextHeader = __t.section('Gamma');
     const group = header.closest('.section-group');
+    const canvas = group.querySelector('.section-content');
     const listStyle = getComputedStyle(list);
     const headerStyle = getComputedStyle(header);
     const expectedTop = list.getBoundingClientRect().top
@@ -170,8 +173,13 @@ test('section selection reveals its header at the top and shades only its conten
       headerTargeted: header.classList.contains('section-picker-target'),
       headerBackground: headerStyle.backgroundColor,
       otherHeaderBackground: getComputedStyle(otherHeader).backgroundColor,
+      canvasBackground: getComputedStyle(canvas).backgroundColor,
       contentBackgrounds: content.map((item) => getComputedStyle(item).backgroundColor),
       targetBackground,
+      leftDelta: Math.abs(canvas.getBoundingClientRect().left - header.getBoundingClientRect().left),
+      rightDelta: Math.abs(canvas.getBoundingClientRect().right - header.getBoundingClientRect().right),
+      topGap: Math.abs(canvas.getBoundingClientRect().top - header.getBoundingClientRect().bottom),
+      bottomGap: Math.abs(nextHeader.getBoundingClientRect().top - canvas.getBoundingClientRect().bottom),
       taskDraft: document.getElementById('taskInput').value,
       linkDraft: document.getElementById('linkInput').value,
     };
@@ -183,7 +191,12 @@ test('section selection reveals its header at the top and shades only its conten
   assert.equal(state.groupTargeted, true);
   assert.equal(state.headerTargeted, false);
   assert.equal(state.headerBackground, state.otherHeaderBackground);
-  assert.deepEqual(state.contentBackgrounds, [state.targetBackground, state.targetBackground]);
+  assert.equal(state.canvasBackground, state.targetBackground);
+  assert.ok(state.contentBackgrounds.every((background) => background === 'rgba(0, 0, 0, 0)'));
+  assert.ok(state.leftDelta <= 1, `content canvas starts ${state.leftDelta}px away from the header`);
+  assert.ok(state.rightDelta <= 1, `content canvas ends ${state.rightDelta}px away from the header`);
+  assert.ok(state.topGap <= 1, `content canvas starts ${state.topGap}px below the header`);
+  assert.ok(state.bottomGap <= 1, `content canvas ends ${state.bottomGap}px before the next header`);
   assert.equal(state.taskDraft, 'draft task');
   assert.equal(state.linkDraft, 'https://example.test/draft');
   assert.deepEqual((await model())[1].tasks, ['[ ] beta one', '[ ] beta two']);
@@ -321,12 +334,35 @@ test('checkbox click tolerates small pointer movement without starting task drag
   })()`), { row: false, handle: true });
 });
 
-test('a section whose tasks are all done collapses automatically', { skip }, async () => {
+test('completed tasks stay in a compact count group without collapsing their section', { skip }, async () => {
   await reloadWithStorage(page, seed());
+  assert.deepEqual(await page.evaluate(`(() => {
+    const group = __t.section('Alpha').closest('.section-group').querySelector('.done-group');
+    return {
+      summary: group.querySelector('summary').textContent.trim(),
+      open: group.open,
+      closedTaskVisible: __t.task('three').getClientRects().length > 0,
+    };
+  })()`), { summary: 'Выполненные · 1', open: false, closedTaskVisible: false });
+
+  await page.evaluate(`__t.section('Alpha').closest('.section-group').querySelector('.done-group summary').click()`);
+  assert.equal(await page.evaluate(`__t.task('three').getClientRects().length > 0`), true);
+  await page.evaluate(`__t.task('one').querySelector('.task-checkbox').click()`);
+  assert.deepEqual(await page.evaluate(`(() => {
+    const group = __t.section('Alpha').closest('.section-group').querySelector('.done-group');
+    return { summary: group.querySelector('summary').textContent.trim(), open: group.open };
+  })()`), { summary: 'Выполненные · 2', open: true });
+
   await page.evaluate(`__t.task('four').querySelector('.task-checkbox').click()`);
-  assert.deepEqual((await model())[1], { name: 'Beta', collapsed: true, tasks: [] });
-  await page.evaluate(`__t.section('Beta').click()`);
   assert.deepEqual((await model())[1], { name: 'Beta', collapsed: false, tasks: ['[x] four'] });
+  assert.deepEqual(await page.evaluate(`(() => {
+    const group = __t.section('Beta').closest('.section-group').querySelector('.done-group');
+    return {
+      summary: group.querySelector('summary').textContent.trim(),
+      open: group.open,
+      taskVisible: __t.task('four').getClientRects().length > 0,
+    };
+  })()`), { summary: 'Выполненные · 1', open: false, taskVisible: false });
 });
 
 test('edits task text inline and deletes a task', { skip }, async () => {
@@ -368,13 +404,13 @@ test('drag and drop reorders tasks, moves them between sections and reorders sec
 
   await page.evaluate(`__t.drag(__t.task('four').querySelector('.drag-handle'), __t.section('Alpha'))`);
   current = await model();
-  assert.deepEqual(current[0].tasks, ['[ ] one', '[x] three', '[ ] four']);
+  assert.deepEqual(current[0].tasks, ['[ ] one', '[ ] four', '[x] three']);
 
   await page.evaluate(`__t.drag(__t.section('Beta'), __t.section('Alpha'), 'before')`);
   assert.deepEqual((await model()).map((s) => s.name), ['Beta', 'Alpha']);
 });
 
-test('collapse all toggles every section and restores auto-collapse state', { skip }, async () => {
+test('collapse all toggles every section and expands every section again', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.evaluate(`__t.click('#collapseAllBtn')`);
   assert.deepEqual((await model()).map((s) => s.collapsed), [true, true]);
@@ -542,6 +578,7 @@ test('language switch re-renders the static UI in English', { skip }, async () =
   await page.evaluate(`__t.click('#langBtn')`);
   assert.equal(await page.evaluate(`document.getElementById('addBtn').textContent`), '+ add');
   assert.equal(await page.evaluate(`document.getElementById('clearDoneBtn').textContent`), '✕ clear');
+  assert.equal(await page.evaluate(`document.querySelector('.done-group summary').textContent.trim()`), 'Completed · 1');
 });
 
 test('light contrast stays hierarchical and all supported panel widths avoid horizontal overflow', { skip }, async () => {

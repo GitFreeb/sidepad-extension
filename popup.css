@@ -142,6 +142,43 @@ body {
 
 .modebar-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
 
+.modebar-icon-btn {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  padding: 4px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text-muted);
+  transition: color 0.15s, background 0.15s;
+}
+
+.modebar-icon-btn svg {
+  width: 20px;
+  height: 20px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.modebar-icon-btn:hover,
+.modebar-icon-btn[aria-expanded="true"] {
+  border-color: transparent;
+  background: var(--hover);
+  color: var(--text);
+}
+
+.modebar-icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Настройки Notes API — оверлей под modebar, чтобы не сдвигать список */
 .api-settings {
   position: absolute;
@@ -867,7 +904,10 @@ body {
 
 /* Section groups: границы, в которых липнет плашка секции */
 .section-group,
-.section-body {
+.section-body,
+.section-content,
+.section-tasks,
+.done-task-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -892,6 +932,23 @@ body {
   cursor: grab;
   user-select: none;
   transition: background 0.15s, border-color 0.15s;
+}
+
+.section-content {
+  margin: 0 10px;
+}
+
+.section-group.section-picker-target .section-content {
+  background: var(--section-target-bg);
+}
+
+.section-group.section-picker-target .section-header {
+  margin-bottom: 0;
+}
+
+/* Подложка выбранной секции заканчивается ровно у следующей плашки. */
+.section-group.section-picker-target + .section-group .section-header {
+  margin-top: 0;
 }
 
 .section-header:hover {
@@ -1019,16 +1076,47 @@ body {
   border-left-color: var(--accent-dim);
 }
 
-/* Выбранная в форме секция: спокойная подложка только под содержимым.
-   Заголовок остаётся визуально идентичным остальным секциям. */
-.section-group.section-picker-target .task-item,
-.section-group.section-picker-target .section-empty {
-  background: var(--section-target-bg);
-}
-
 .section-group.section-picker-target .task-item:hover {
   background: var(--hover);
 }
+
+.done-group-row {
+  list-style: none;
+}
+
+.done-group {
+  margin: 1px 0 2px;
+}
+
+.done-group summary {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px 6px 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.done-group summary::-webkit-details-marker { display: none; }
+.done-group:not([open]) .done-task-list { display: none; }
+
+.done-group summary::before {
+  content: '›';
+  display: inline-block;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 0.15s;
+}
+
+.done-group[open] summary::before { transform: rotate(90deg); }
+.done-group summary:hover { color: var(--accent); }
+.done-group summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .section-scroll-spacer {
   height: 0;

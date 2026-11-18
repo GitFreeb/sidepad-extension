@@ -128,6 +128,31 @@ test('enabling Notes API opens the connect page, keeps the legacy UI and offers 
   assert.ok(opened.includes(`https://notes.lab/#sidepad-connect=${browser.extensionId}`), opened.join('\n'));
 
   assert.equal(await page.evaluate(`document.getElementById('apiSettings').hidden`), false);
+  assert.deepEqual(await page.evaluate(`(() => {
+    const button = document.getElementById('apiSettingsBtn');
+    const icon = button.querySelector('svg');
+    const style = getComputedStyle(button);
+    return {
+      hasSvg: Boolean(icon),
+      label: button.getAttribute('aria-label'),
+      expanded: button.getAttribute('aria-expanded'),
+      text: button.textContent.trim(),
+      borderWidth: style.borderWidth,
+      width: Math.round(button.getBoundingClientRect().width),
+      iconWidth: icon ? Math.round(icon.getBoundingClientRect().width) : 0,
+    };
+  })()`), {
+    hasSvg: true,
+    label: 'Настройки Notes API',
+    expanded: 'true',
+    text: '',
+    borderWidth: '0px',
+    width: 28,
+    iconWidth: 20,
+  });
+  await page.evaluate(`__t.click('#apiSettingsBtn')`);
+  assert.equal(await page.evaluate(`document.getElementById('apiSettingsBtn').getAttribute('aria-expanded')`), 'false');
+  await page.evaluate(`__t.click('#apiSettingsBtn')`);
   assert.equal(await page.evaluate(`document.getElementById('apiLegacySelect').selectedOptions[0].textContent`), 'dop.md');
   assert.equal(await page.evaluate(`document.getElementById('apiRecovery').open`), false);
   for (const id of ['addBtn', 'taskInput', 'sectionInput', 'importBtn', 'exportBtn', 'collapseAllBtn', 'clearDoneBtn', 'taskList']) {

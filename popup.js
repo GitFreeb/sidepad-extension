@@ -14,6 +14,7 @@ const I18N = {
     emptyList:          'Нет задач. Добавьте первую!',
     loadExample:        'Загрузить пример →',
     emptySection:       'нет задач',
+    doneGroup:          'Выполненные · {count}',
     clearConfirm:         'Список будет очищен. Текущая версия сохранится в Downloads.',
     closeNoSaveConfirm:   'Список будет закрыт без сохранения. Продолжить?',
     tabCloseTitle:        'Закрыть (сохранить в Downloads)',
@@ -109,6 +110,7 @@ const I18N = {
     emptyList:          'No tasks. Add the first one!',
     loadExample:        'Load example →',
     emptySection:       'no tasks',
+    doneGroup:          'Completed · {count}',
     clearConfirm:         'The list will be cleared. Current version will be saved to Downloads.',
     closeNoSaveConfirm:   'List will be closed without saving. Continue?',
     tabCloseTitle:        'Close (save to Downloads)',
@@ -312,6 +314,7 @@ let activeTabId = '';
 let tasks       = [];
 let sections    = [];
 let collapsedSections = new Set();
+let openDoneGroups = new Set();
 let dragType  = null;
 let dragId    = null;
 let editingId = null;
@@ -462,6 +465,8 @@ function sidepadConfirmSectionRename(oldName, newName) {
     persistDefaultSections();
   }
   if (selectedSection === oldName) selectedSection = newName;
+  if (collapsedSections.delete(oldName)) collapsedSections.add(newName);
+  if (openDoneGroups.delete(oldName)) openDoneGroups.add(newName);
   updateDefaultSectionButton();
 }
 
@@ -1353,7 +1358,7 @@ function moveTask(sourceId, targetId, pos) {
   const tgtIdx = arr.findIndex(t => t.id === targetId);
   arr.splice(pos === 'after' ? tgtIdx + 1 : tgtIdx, 0, { ...srcTask, section: tgtTask.section });
   tasks = arr;
-  syncAutoCollapse(); saveTasks(); render();
+  reconcileSectionViewState(); saveTasks(); render();
 }
 
 function moveTaskToSection(sourceId, targetSection, pos = 'end') {
@@ -1374,7 +1379,7 @@ function moveTaskToSection(sourceId, targetSection, pos = 'end') {
   arr.splice(insertAt, 0, { ...srcTask, section: targetSection });
   tasks = arr;
   if (!srcTask.done) collapsedSections.delete(targetSection);
-  syncAutoCollapse(); saveTasks(); render();
+  reconcileSectionViewState(); saveTasks(); render();
 }
 
 function moveSection(sourceName, targetName, pos) {
@@ -1388,7 +1393,7 @@ function moveSection(sourceName, targetName, pos) {
   tasks = rest;
   const newOrder = deriveSections(tasks);
   sections = [...newOrder, ...sections.filter(s => !newOrder.includes(s))];
-  syncAutoCollapse(); saveTasks(); render();
+  reconcileSectionViewState(); saveTasks(); render();
 }
 
 function moveTab(sourceId, targetId, pos) {
@@ -1403,32 +1408,21 @@ function moveTab(sourceId, targetId, pos) {
   renderTabs();
 }
 
-/* ── Collapse state ── */
+/* ── Section view state ── */
 function resetCollapsedState() {
   collapsedSections.clear();
-  const map = new Map();
-  tasks.forEach(t => {
-    const key = t.section;
-    if (!key) return;
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(t);
-  });
-  map.forEach((items, title) => {
-    if (items.length > 0 && items.every(t => t.done)) {
-      collapsedSections.add(title);
-    }
-  });
+  openDoneGroups.clear();
 }
 
-function syncAutoCollapse() {
-  const map = new Map();
-  tasks.forEach(t => {
-    if (!t.section) return;
-    if (!map.has(t.section)) map.set(t.section, []);
-    map.get(t.section).push(t);
+function reconcileSectionViewState() {
+  const available = new Set([...sections, ...tasks.map(t => t.section).filter(Boolean)]);
+  collapsedSections.forEach(title => {
+    if (!available.has(title)) collapsedSections.delete(title);
   });
-  map.forEach((items, title) => {
-    if (items.length > 0 && items.every(t => t.done)) collapsedSections.add(title);
+  openDoneGroups.forEach(title => {
+    if (!available.has(title) || !tasks.some(t => t.section === title && t.done)) {
+      openDoneGroups.delete(title);
+    }
   });
 }
 
@@ -1567,6 +1561,47 @@ function scrollSectionToTop(section) {
   list.scrollTo({ top: targetTop, behavior: 'auto' });
 }
 
+function renderTaskItem(task, orderedSections, readOnly) {
+  const isEditing    = task.id === editingId;
+  const isMoveOpen   = task.id === moveMenuTaskId;
+  const otherSecs    = orderedSections.filter(s => s !== task.section);
+  const moveMenuHtml = isMoveOpen && otherSecs.length > 0
+    ? `<ul class="move-section-menu" data-move-id="${task.id}">
+        ${otherSecs.map(s => `<li data-action="move-to-section" data-section="${escapeHtml(s)}">${escapeHtml(s)}</li>`).join('')}
+      </ul>`
+    : '';
+  const createdAt = formatCreatedAt(task.createdAt);
+  const createdAtTitle = createdAt
+    ? tr('createdAtTitle').replace('{value}', formatCreatedAt(task.createdAt, { long: true }))
+    : '';
+
+  return `<li class="task-item ${task.done ? 'done' : ''}${isEditing ? ' editing' : ''}${isMoveOpen ? ' move-open' : ''}" data-id="${task.id}" draggable="false">
+    <span class="drag-handle" draggable="${isEditing || readOnly ? 'false' : 'true'}">⠿</span>
+    <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
+    <div class="task-content">
+      ${isEditing
+        ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="${isServerTab() ? SERVER_TEXT_MAX : 240}" draggable="false">`
+        : `<div class="task-text" data-action="edit-text">${escapeHtml(task.text)}</div>`}
+      ${task.url || createdAt ? `<div class="task-meta">
+        ${task.url
+          ? `<a class="task-link" href="${escapeHtml(task.url)}" data-action="link" title="${escapeHtml(task.url)}" draggable="false">${escapeHtml(task.url)}</a>`
+          : ''}
+        ${createdAt
+          ? `<time class="task-created" datetime="${escapeHtml(task.createdAt)}" title="${escapeHtml(createdAtTitle)}">${escapeHtml(createdAt)}</time>`
+          : ''}
+      </div>` : ''}
+    </div>
+    <button class="btn-copy" data-action="copy" title="${tr('copyTitle')}" draggable="false">⧉</button>
+    ${otherSecs.length > 0 && !readOnly
+      ? `<button class="btn-move" data-action="move-task" title="${tr('moveToTitle')}" draggable="false">→</button>`
+      : ''}
+    ${task.id > 10000 && !readOnly
+      ? `<button class="btn-delete" data-action="delete" title="${tr('deleteTitle')}" draggable="false">×</button>`
+      : ''}
+    ${moveMenuHtml}
+  </li>`;
+}
+
 function render() {
   const list    = document.getElementById('taskList');
   const counter = document.getElementById('counter');
@@ -1611,7 +1646,9 @@ function render() {
   let html = '';
   orderedSections.forEach(title => {
     const items = taskMap.get(title) || [];
-    const secDone = items.filter(t => t.done).length;
+    const openItems = items.filter(t => !t.done);
+    const doneItems = items.filter(t => t.done);
+    const secDone = doneItems.length;
     const isCollapsed = collapsedSections.has(title);
     const isRenaming  = renamingSection === title;
     const pinned      = isPinnedSection(title);
@@ -1632,48 +1669,23 @@ function render() {
     </li>`;
 
     if (!isCollapsed) {
+      html += '<li class="section-content"><ul class="section-tasks">';
       if (items.length === 0) {
         html += `<li class="section-empty">${tr('emptySection')}</li>`;
       }
-      items.forEach(task => {
-        const isEditing    = task.id === editingId;
-        const isMoveOpen   = task.id === moveMenuTaskId;
-        const otherSecs    = orderedSections.filter(s => s !== task.section);
-        const moveMenuHtml = isMoveOpen && otherSecs.length > 0
-          ? `<ul class="move-section-menu" data-move-id="${task.id}">
-              ${otherSecs.map(s => `<li data-action="move-to-section" data-section="${escapeHtml(s)}">${escapeHtml(s)}</li>`).join('')}
-            </ul>`
-          : '';
-        const createdAt = formatCreatedAt(task.createdAt);
-        const createdAtTitle = createdAt
-          ? tr('createdAtTitle').replace('{value}', formatCreatedAt(task.createdAt, { long: true }))
-          : '';
-        html += `<li class="task-item ${task.done ? 'done' : ''}${isEditing ? ' editing' : ''}${isMoveOpen ? ' move-open' : ''}" data-id="${task.id}" draggable="false">
-          <span class="drag-handle" draggable="${isEditing || readOnly ? 'false' : 'true'}">⠿</span>
-          <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
-          <div class="task-content">
-            ${isEditing
-              ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="${isServerTab() ? SERVER_TEXT_MAX : 240}" draggable="false">`
-              : `<div class="task-text" data-action="edit-text">${escapeHtml(task.text)}</div>`}
-            ${task.url || createdAt ? `<div class="task-meta">
-              ${task.url
-                ? `<a class="task-link" href="${escapeHtml(task.url)}" data-action="link" title="${escapeHtml(task.url)}" draggable="false">${escapeHtml(task.url)}</a>`
-                : ''}
-              ${createdAt
-                ? `<time class="task-created" datetime="${escapeHtml(task.createdAt)}" title="${escapeHtml(createdAtTitle)}">${escapeHtml(createdAt)}</time>`
-                : ''}
-            </div>` : ''}
-          </div>
-          <button class="btn-copy" data-action="copy" title="${tr('copyTitle')}" draggable="false">⧉</button>
-          ${otherSecs.length > 0 && !readOnly
-            ? `<button class="btn-move" data-action="move-task" title="${tr('moveToTitle')}" draggable="false">→</button>`
-            : ''}
-          ${task.id > 10000 && !readOnly
-            ? `<button class="btn-delete" data-action="delete" title="${tr('deleteTitle')}" draggable="false">×</button>`
-            : ''}
-          ${moveMenuHtml}
+      html += openItems.map(task => renderTaskItem(task, orderedSections, readOnly)).join('');
+      if (doneItems.length > 0) {
+        const doneLabel = tr('doneGroup').replace('{count}', doneItems.length);
+        html += `<li class="done-group-row">
+          <details class="done-group" data-section="${escapeHtml(title)}"${openDoneGroups.has(title) ? ' open' : ''}>
+            <summary>${escapeHtml(doneLabel)}</summary>
+            <ul class="done-task-list">
+              ${doneItems.map(task => renderTaskItem(task, orderedSections, readOnly)).join('')}
+            </ul>
+          </details>
         </li>`;
-      });
+      }
+      html += '</ul></li>';
     }
     html += `</ul></li>`;
   });
@@ -1724,10 +1736,6 @@ function finishSectionRename(input) {
   sections = [...new Set(sections.map(s => s === oldName ? newName : s))];
   tasks    = tasks.map(t => t.section === oldName ? { ...t, section: newName } : t);
   sidepadConfirmSectionRename(oldName, newName);
-  if (collapsedSections.has(oldName)) {
-    collapsedSections.delete(oldName);
-    collapsedSections.add(newName);
-  }
   saveTasks();
   render();
 }
@@ -1737,6 +1745,7 @@ function deleteSection(name) {
   if (isPinnedSection(name)) return;
   if (routeIntent({ kind: 'section.delete', sectionName: name })) return;
   collapsedSections.delete(name);
+  openDoneGroups.delete(name);
   sections = sections.filter(s => s !== name);
   tasks    = tasks.filter(t => t.section !== name);
   reconcileDefaultSection(getActiveTab(), { clearMissing: true });
@@ -1836,13 +1845,13 @@ document.getElementById('taskList').addEventListener('click', (e) => {
       const toggled = tasks.find(t => t.id === id);
       tasks = [toggled, ...tasks.filter(t => t.id !== id)];
     }
-    syncAutoCollapse();
+    reconcileSectionViewState();
     saveTasks();
     render();
   }
   if (action === 'delete') {
     tasks = tasks.filter(t => t.id !== id);
-    syncAutoCollapse();
+    reconcileSectionViewState();
     saveTasks();
     render();
   }
@@ -1851,6 +1860,15 @@ document.getElementById('taskList').addEventListener('click', (e) => {
     chrome.tabs.create({ url: e.target.closest('[data-action="link"]').href });
   }
 });
+
+document.getElementById('taskList').addEventListener('toggle', (e) => {
+  const group = e.target;
+  if (!group.classList?.contains('done-group')) return;
+  const section = group.dataset.section;
+  if (!section) return;
+  if (group.open) openDoneGroups.add(section);
+  else openDoneGroups.delete(section);
+}, true);
 
 document.getElementById('taskList').addEventListener('keydown', (e) => {
   if (e.target.classList.contains('section-rename-input')) {
@@ -2054,7 +2072,7 @@ function addTask() {
   textEl.value = '';
   linkEl.value = '';
   textEl.focus();
-  syncAutoCollapse();
+  reconcileSectionViewState();
   saveTasks();
   sidepadConfirmActiveTaskCreate(section, selectionAtSubmit);
 }
@@ -2491,7 +2509,7 @@ function sidepadApplyServerTab(model, { remote = false, selectDefault = false, p
     tasks = tab.tasks;
     sections = tab.sections;
     if (remote) resetCollapsedState();
-    else syncAutoCollapse();
+    else reconcileSectionViewState();
   }
   reconcileDefaultSection(tab, {
     select: selectDefault || (tab.id === activeTabId && selectedSection === null),

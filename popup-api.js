@@ -368,6 +368,8 @@ function renderModebar() {
   el.toggle.checked = mode.enabled;
   el.settingsBtn.hidden = !mode.enabled;
   el.settingsBtn.title = tr('settingsTitle');
+  el.settingsBtn.setAttribute('aria-label', tr('settingsTitle'));
+  el.settingsBtn.setAttribute('aria-expanded', String(mode.enabled && !el.settings.hidden));
   el.openTab.hidden = !mode.enabled || Boolean(sidepadServerTabId());
   el.openTab.textContent = tr('openServerTab');
   if (mode.enabled) el.hint.hidden = true;
@@ -430,10 +432,10 @@ function renderLegacyOptions() {
 }
 
 function renderChrome() {
+  renderSettings();
   renderModebar();
   renderSync();
   renderNotice();
-  renderSettings();
 }
 
 /* ── Legacy dop.md choice ── */
