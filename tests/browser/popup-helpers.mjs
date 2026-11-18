@@ -86,7 +86,7 @@ export function legacyTab(id, title, sections, extra = {}) {
   return { id, title, tasks, sections: names, autoSave: false, ...extra };
 }
 
-// Свежий updateInfo не даёт popup.js ходить на GitHub за манифестом — тесты
+// Свежий updateInfo не даёт popup.js ходить на GitHub за последним релизом — тесты
 // остаются офлайновыми и сетевой журнал содержит только то, что проверяется.
 export function freshUpdateInfo(version = '0.0.0') {
   return { lastChecked: Date.now(), latestVersion: version, dismissedVersion: '' };

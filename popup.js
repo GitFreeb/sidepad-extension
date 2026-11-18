@@ -202,8 +202,7 @@ const LEGACY_DEFAULT_SECTIONS = new Set(['__default__', 'Дополнитель�
 
 /* ── Update check ── */
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const MANIFEST_RAW_URL = 'https://raw.githubusercontent.com/GitFreeb/sidepad-extension/main/manifest.json';
-const REPO_URL = 'https://github.com/GitFreeb/sidepad-extension';
+const LATEST_RELEASE_API_URL = 'https://api.github.com/repos/GitFreeb/sidepad-extension/releases/latest';
 
 function compareVersions(a, b) {
   const pa = String(a).split('.').map(Number);
@@ -233,11 +232,16 @@ function checkForUpdate() {
       return;
     }
 
-    fetch(MANIFEST_RAW_URL)
+    fetch(LATEST_RELEASE_API_URL, {
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: { Accept: 'application/vnd.github+json' },
+    })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('bad status'))))
       .then((json) => {
         const current = chrome.runtime.getManifest().version;
-        const remote  = String(json && json.version || '');
+        const tag = !json?.draft && !json?.prerelease ? String(json?.tag_name || '') : '';
+        const remote = /^v\d+(?:\.\d+){1,3}$/.test(tag) ? tag.slice(1) : '';
         if (remote && compareVersions(remote, current) > 0) {
           updateInfo.latestVersion = remote;
         } else {
@@ -2402,7 +2406,7 @@ document.getElementById('collapseAllBtn').addEventListener('click', () => {
 
 /* ── Update banner interactions ── */
 document.getElementById('updateBannerText').addEventListener('click', () => {
-  chrome.tabs.create({ url: REPO_URL });
+  chrome.tabs.create({ url: chrome.runtime.getURL('installer.html') });
 });
 
 document.getElementById('updateBannerClose').addEventListener('click', (e) => {

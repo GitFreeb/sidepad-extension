@@ -13,6 +13,15 @@ test('legacy code loads before the API controller module', async () => {
   assert.ok(html.indexOf('<script src="popup.js"></script>') < html.indexOf('<script type="module" src="popup-api.js"></script>'));
 });
 
+test('update banner opens the bundled installer instead of a GitHub page', async () => {
+  const html = await read('popup.html');
+  const source = await read('popup.js');
+  assert.match(html, /<button[^>]+id="updateBannerText"/);
+  assert.match(source, /chrome\.runtime\.getURL\('installer\.html'\)/);
+  assert.match(source, /releases\/latest/);
+  assert.doesNotMatch(source, /MANIFEST_RAW_URL|const REPO_URL/);
+});
+
 test('there is a single Sidepad UI: no separate API application remains', async () => {
   const html = await read('popup.html');
   assert.match(html, /id="legacyMode"/);

@@ -509,13 +509,19 @@ body {
 .update-banner[hidden] { display: none; }
 
 .update-banner-text {
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--accent);
+  font: inherit;
   font-weight: 600;
   cursor: pointer;
   user-select: none;
+  text-align: left;
 }
 
 .update-banner-text:hover { text-decoration: underline; }
+.update-banner-text:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
 .update-banner-close {
   background: none;
