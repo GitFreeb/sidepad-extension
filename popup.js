@@ -1558,8 +1558,7 @@ function scrollSectionToTop(section) {
   // её заголовок встал у верхней границы. Добавляем ровно недостающий воздух.
   if (spacer && targetTop > maxTop) spacer.style.height = `${targetTop - maxTop}px`;
 
-  const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-  list.scrollTo({ top: targetTop, behavior });
+  list.scrollTo({ top: targetTop, behavior: 'auto' });
 }
 
 function render() {
@@ -1643,8 +1642,8 @@ function render() {
         const createdAtTitle = createdAt
           ? tr('createdAtTitle').replace('{value}', formatCreatedAt(task.createdAt, { long: true }))
           : '';
-        html += `<li class="task-item ${task.done ? 'done' : ''}${isEditing ? ' editing' : ''}${isMoveOpen ? ' move-open' : ''}" data-id="${task.id}" draggable="${isEditing || readOnly ? 'false' : 'true'}">
-          <span class="drag-handle" draggable="false">⠿</span>
+        html += `<li class="task-item ${task.done ? 'done' : ''}${isEditing ? ' editing' : ''}${isMoveOpen ? ' move-open' : ''}" data-id="${task.id}" draggable="false">
+          <span class="drag-handle" draggable="${isEditing || readOnly ? 'false' : 'true'}">⠿</span>
           <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
           <div class="task-content">
             ${isEditing

@@ -284,8 +284,32 @@ test('selecting a server task target expands only that section before confirmed 
 test('toggle, inline edit and delete map to task.toggle, task.update and task.delete', { skip }, async () => {
   await settle();
   const firstCreatedAt = await page.evaluate(`__t.task('first').querySelector('.task-created').dateTime`);
-  await page.evaluate(`__t.task('first').querySelector('.task-checkbox').click()`);
+  await page.evaluate(`(() => {
+    window.__taskDragStarts = 0;
+    document.getElementById('taskList').addEventListener('dragstart', (event) => {
+      if (event.target.closest('.task-item')) window.__taskDragStarts += 1;
+    });
+  })()`);
+  const checkboxPoint = await page.evaluate(`(() => {
+    const checkbox = __t.task('first').querySelector('.task-checkbox');
+    const rect = checkbox.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`);
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: checkboxPoint.x, y: checkboxPoint.y });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed', x: checkboxPoint.x, y: checkboxPoint.y,
+    button: 'left', buttons: 1, clickCount: 1,
+  });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved', x: checkboxPoint.x + 3, y: checkboxPoint.y,
+    button: 'left', buttons: 1,
+  });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased', x: checkboxPoint.x + 3, y: checkboxPoint.y,
+    button: 'left', buttons: 0, clickCount: 1,
+  });
   await page.waitFor(`__t.model().find((s) => s.name === 'Inbox').tasks.at(-1) === '[x] first'`);
+  assert.equal(await page.evaluate('window.__taskDragStarts'), 0);
   assert.equal(op().type, 'task.toggle');
   assert.equal(op().done, true);
   assert.equal(await page.evaluate(`__t.task('first').querySelector('.task-created').dateTime`), firstCreatedAt);
@@ -307,11 +331,11 @@ test('toggle, inline edit and delete map to task.toggle, task.update and task.de
 
 test('drag and drop and the move menu reorder through task.move and section.move', { skip }, async () => {
   await settle();
-  await page.evaluate(`__t.drag(__t.task('closed'), __t.task('second (edited)'), 'after')`);
+  await page.evaluate(`__t.drag(__t.task('closed').querySelector('.drag-handle'), __t.task('second (edited)'), 'after')`);
   await page.waitFor(`__t.model().find((s) => s.name === 'Inbox').tasks[0] === '[ ] second (edited)'`);
   assert.deepEqual(op(), { type: 'task.move', task_ref: op().task_ref, target_section_ref: op().target_section_ref, index: 1 });
 
-  await page.evaluate(`__t.drag(__t.task('report'), __t.task('closed'), 'before')`);
+  await page.evaluate(`__t.drag(__t.task('report').querySelector('.drag-handle'), __t.task('closed'), 'before')`);
   await page.waitFor(`__t.model().find((s) => s.name === 'Inbox').tasks.includes('[ ] report')`);
   assert.deepEqual((await model()).find((s) => s.name === 'Inbox').tasks, ['[ ] second (edited)', '[ ] report', '[ ] closed', '[x] first']);
 
