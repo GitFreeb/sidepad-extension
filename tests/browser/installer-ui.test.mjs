@@ -1,9 +1,14 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Browser, browserExecutable } from './cdp.mjs';
 
 const executable = browserExecutable();
 const skip = executable ? false : 'Chromium-based browser is not available';
+const currentVersion = JSON.parse(readFileSync(new URL('../../manifest.json', import.meta.url), 'utf8')).version;
+const latestParts = currentVersion.split('.').map(Number);
+latestParts[latestParts.length - 1] += 1;
+const latestVersion = latestParts.join('.');
 
 const INSTALLER_HELPERS = `
 (() => {
@@ -12,7 +17,7 @@ const INSTALLER_HELPERS = `
     const url = String(input);
     if (url === 'https://api.github.com/repos/GitFreeb/sidepad-extension/releases/latest') {
       return Promise.resolve(new Response(JSON.stringify({
-        tag_name: 'v1.7.10.2', draft: false, prerelease: false,
+        tag_name: 'v${latestVersion}', draft: false, prerelease: false,
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     }
     return nativeFetch(input, init);
@@ -33,7 +38,7 @@ before(async () => {
   });
   await page.send('Page.reload');
   await loaded;
-  await page.waitFor(`document.getElementById('latestVersion').textContent === 'v1.7.10.2'`);
+  await page.waitFor(`document.getElementById('latestVersion').textContent === 'v${latestVersion}'`);
 });
 
 after(async () => {
@@ -53,12 +58,12 @@ test('installer shows the release, stored theme and explicit folder step', { ski
   })`);
   assert.deepEqual(view, {
     title: 'Обновление Sidepad',
-    current: 'v1.7.10.1',
-    latest: 'v1.7.10.2',
+    current: `v${currentVersion}`,
+    latest: `v${latestVersion}`,
     folder: 'не выбрана',
-    status: 'Версия v1.7.10.2 готова к установке.',
+    status: `Версия v${latestVersion} готова к установке.`,
     theme: 'light',
-    installLabel: 'Установить v1.7.10.2',
+    installLabel: `Установить v${latestVersion}`,
     steps: ['Проверить папку', 'Загрузить файлы релиза', 'Проверить пакет', 'Установить и перезапустить'],
   });
 });
@@ -68,5 +73,5 @@ test('installer remains usable at a narrow viewport and switches language', { sk
   assert.equal(await page.evaluate(`document.documentElement.scrollWidth <= document.documentElement.clientWidth`), true);
   await page.evaluate(`document.getElementById('langButton').click()`);
   await page.waitFor(`document.getElementById('pageTitle').textContent === 'Update Sidepad'`);
-  assert.equal(await page.evaluate(`document.getElementById('installButton').textContent`), 'Install v1.7.10.2');
+  assert.equal(await page.evaluate(`document.getElementById('installButton').textContent`), `Install v${latestVersion}`);
 });

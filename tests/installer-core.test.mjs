@@ -83,12 +83,14 @@ test('latest release ignores drafts and normalizes the release tag', async () =>
 
 test('release package is fully downloaded from the immutable tag and manifest is installed last', async () => {
   const descriptor = JSON.parse(await read(PACKAGE_DESCRIPTOR));
+  const version = JSON.parse(await read('manifest.json')).version;
+  const tag = `v${version}`;
   const bodies = new Map();
-  for (const path of descriptor.files) bodies.set(rawFileUrl('v1.7.10.1', path), await read(path));
+  for (const path of descriptor.files) bodies.set(rawFileUrl(tag, path), await read(path));
   const calls = [];
   const progress = [];
   const update = await fetchReleasePackage({
-    tag: 'v1.7.10.1',
+    tag,
     fetchImpl: async (url) => {
       calls.push(url);
       return bodies.has(url) ? response(bodies.get(url)) : response('missing', 404);
@@ -96,7 +98,7 @@ test('release package is fully downloaded from the immutable tag and manifest is
     onProgress: (value) => progress.push(value),
   });
 
-  assert.equal(update.version, '1.7.10.1');
+  assert.equal(update.version, version);
   assert.equal(update.files.size, descriptor.files.length);
   assert.equal(calls.length, descriptor.files.length);
   assert.equal(progress.at(-1).completed, descriptor.files.length);
