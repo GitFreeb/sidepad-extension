@@ -710,7 +710,6 @@ body {
 }
 
 .csel-item-meta,
-.csel-counts,
 .csel-count {
   display: inline-flex;
   align-items: center;
@@ -721,20 +720,14 @@ body {
   gap: 8px;
 }
 
-.csel-counts {
-  gap: 7px;
+.csel-count {
   color: var(--text-dim);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
-.csel-count { gap: 3px; }
-.csel-count::before { line-height: 1; }
-.csel-count-open::before { content: '○'; }
-.csel-count-done::before { content: '✓'; }
-
-.csel-item:hover .csel-counts,
-.csel-item.focused .csel-counts { color: var(--text-muted); }
+.csel-item:hover .csel-count,
+.csel-item.focused .csel-count { color: var(--text-muted); }
 
 .csel-default-mark {
   flex-shrink: 0;
