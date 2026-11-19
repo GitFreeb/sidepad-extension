@@ -134,13 +134,25 @@ test('enabling Notes API opens the connect page, keeps the legacy UI and offers 
     const style = getComputedStyle(button);
     const iconRect = icon?.getBoundingClientRect();
     const checkboxRect = document.getElementById('apiModeToggle').getBoundingClientRect();
+    const badge = document.querySelector('.experimental-badge');
+    const badgeRect = badge.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    const hoverRule = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules))
+      .find((rule) => rule.selectorText?.includes('.modebar-icon-btn:hover'));
     return {
       hasSvg: Boolean(icon),
       label: button.getAttribute('aria-label'),
       expanded: button.getAttribute('aria-expanded'),
       text: button.textContent.trim(),
       borderWidth: style.borderWidth,
-      width: Math.round(button.getBoundingClientRect().width),
+      width: Math.round(buttonRect.width),
+      height: Math.round(buttonRect.height),
+      backgroundColor: style.backgroundColor,
+      hoverBackground: hoverRule?.style.background || '',
+      marginLeft: style.marginLeft,
+      marginRight: style.marginRight,
+      followsDevBadge: buttonRect.left >= badgeRect.right,
       iconWidth: iconRect ? Math.round(iconRect.width) : 0,
       iconHeight: iconRect ? Math.round(iconRect.height) : 0,
       checkboxWidth: Math.round(checkboxRect.width),
@@ -152,7 +164,13 @@ test('enabling Notes API opens the connect page, keeps the legacy UI and offers 
     expanded: 'true',
     text: '',
     borderWidth: '0px',
-    width: 32,
+    width: 20,
+    height: 30,
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+    hoverBackground: 'transparent',
+    marginLeft: '5px',
+    marginRight: '0px',
+    followsDevBadge: true,
     iconWidth: 13,
     iconHeight: 13,
     checkboxWidth: 13,
