@@ -132,6 +132,8 @@ test('enabling Notes API opens the connect page, keeps the legacy UI and offers 
     const button = document.getElementById('apiSettingsBtn');
     const icon = button.querySelector('svg');
     const style = getComputedStyle(button);
+    const iconRect = icon?.getBoundingClientRect();
+    const checkboxRect = document.getElementById('apiModeToggle').getBoundingClientRect();
     return {
       hasSvg: Boolean(icon),
       label: button.getAttribute('aria-label'),
@@ -139,7 +141,10 @@ test('enabling Notes API opens the connect page, keeps the legacy UI and offers 
       text: button.textContent.trim(),
       borderWidth: style.borderWidth,
       width: Math.round(button.getBoundingClientRect().width),
-      iconWidth: icon ? Math.round(icon.getBoundingClientRect().width) : 0,
+      iconWidth: iconRect ? Math.round(iconRect.width) : 0,
+      iconHeight: iconRect ? Math.round(iconRect.height) : 0,
+      checkboxWidth: Math.round(checkboxRect.width),
+      checkboxHeight: Math.round(checkboxRect.height),
     };
   })()`), {
     hasSvg: true,
@@ -148,7 +153,10 @@ test('enabling Notes API opens the connect page, keeps the legacy UI and offers 
     text: '',
     borderWidth: '0px',
     width: 32,
-    iconWidth: 29,
+    iconWidth: 13,
+    iconHeight: 13,
+    checkboxWidth: 13,
+    checkboxHeight: 13,
   });
   await page.evaluate(`__t.click('#apiSettingsBtn')`);
   assert.equal(await page.evaluate(`document.getElementById('apiSettingsBtn').getAttribute('aria-expanded')`), 'false');
