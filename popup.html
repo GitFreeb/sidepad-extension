@@ -10,6 +10,11 @@
     <span class="modebar-title">Sidepad</span>
     <span class="api-mode-hint" id="apiModeHint" hidden></span>
     <button type="button" class="modebar-btn" id="openServerTabBtn" hidden></button>
+    <label class="api-mode-switch" for="apiModeToggle">
+      <input type="checkbox" id="apiModeToggle">
+      <span>Notes API</span>
+      <span class="experimental-badge">dev</span>
+    </label>
     <button type="button" class="modebar-btn modebar-icon-btn" id="apiSettingsBtn"
       aria-controls="apiSettings" aria-expanded="false" hidden>
       <svg viewBox="0 0 32 32" aria-hidden="true">
@@ -17,11 +22,6 @@
         <circle cx="16" cy="16" r="4.5"/>
       </svg>
     </button>
-    <label class="api-mode-switch" for="apiModeToggle">
-      <input type="checkbox" id="apiModeToggle">
-      <span>Notes API</span>
-      <span class="experimental-badge">dev</span>
-    </label>
   </div>
 
   <section class="api-settings" id="apiSettings" hidden>
