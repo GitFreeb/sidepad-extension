@@ -184,6 +184,14 @@ test('enabling Notes API opens the connect page, keeps the legacy UI and offers 
   for (const id of ['addBtn', 'taskInput', 'sectionInput', 'importBtn', 'exportBtn', 'collapseAllBtn', 'clearDoneBtn', 'taskList']) {
     assert.equal(await page.evaluate(`document.getElementById('${id}').offsetParent !== null`), true, id);
   }
+
+  assert.deepEqual(await page.evaluate(`__t.storage(['notesApiLegacyTabV1'])`), {});
+  await reload(page);
+  await page.waitFor(`document.getElementById('apiModeToggle').checked && !document.getElementById('apiSettingsBtn').hidden && __t.tabs().includes('*notes.md') && document.getElementById('syncState').dataset.kind === 'pending'`);
+  assert.deepEqual(await page.evaluate(`({
+    hidden: document.getElementById('apiSettings').hidden,
+    expanded: document.getElementById('apiSettingsBtn').getAttribute('aria-expanded'),
+  })`), { hidden: true, expanded: 'false' });
   assert.equal(fake.log.filter((entry) => entry.path.startsWith('/api/')).length, 0, 'nothing is requested before pairing');
 });
 
