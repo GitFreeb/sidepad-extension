@@ -553,7 +553,7 @@ async function activate({ focus }) {
   sidepadAttachServer(backend, SERVER_TAB, { focus: focus && !ui.tabClosed, show: !ui.tabClosed });
   ui.appliedRevision = null;
   applySnapshot({ force: true });
-  if (ui.legacyChoice === undefined) el.settings.hidden = false;
+  if (focus && ui.legacyChoice === undefined) el.settings.hidden = false;
   renderChrome();
   poller.start();
 }
