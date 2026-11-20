@@ -2179,6 +2179,15 @@ window.addEventListener('blur', () => {
       dragType = 'task';
       dragId   = Number(taskEl.dataset.id);
       e.dataTransfer.effectAllowed = 'move';
+
+      // The handle remains the deliberate drag initiator, but the feedback
+      // must represent the object being moved. Keep the pointer anchored to
+      // its real grab point so the full-row preview does not jump on start.
+      const taskRect = taskEl.getBoundingClientRect();
+      const dragX = Math.max(0, Math.min(taskRect.width, e.clientX - taskRect.left));
+      const dragY = Math.max(0, Math.min(taskRect.height, e.clientY - taskRect.top));
+      e.dataTransfer.setDragImage(taskEl, dragX, dragY);
+
       setTimeout(() => taskEl.classList.add('dragging'), 0);
     } else if (secEl && isPinnedSection(secEl.dataset.section)) {
       e.preventDefault();

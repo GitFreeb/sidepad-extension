@@ -102,13 +102,14 @@ test('task cards give text the full control width with compact aligned controls 
   assert.ok(layout.handleLeftInset <= 6, `drag handle inset is ${layout.handleLeftInset}px`);
   assert.ok(layout.handleCenterDelta <= 1.5, `drag handle is ${layout.handleCenterDelta}px off centre`);
   assert.ok(layout.handleHeight < 24, `drag handle unexpectedly spans ${layout.handleHeight}px`);
-  assert.equal(layout.checkboxWidth, layout.checkboxHeight);
+  assert.equal(layout.checkboxWidth, 14);
+  assert.equal(layout.checkboxHeight, 14);
   assert.ok(layout.textLeftDelta <= 1.5, `text starts ${layout.textLeftDelta}px away from the checkbox stack`);
   assert.ok(layout.textRightDelta <= 1.5, `text ends ${layout.textRightDelta}px away from the action edge`);
   assert.equal(layout.textBelowControls, true);
   assert.ok(layout.rightInset >= 3 && layout.rightInset <= 5, `right inset is ${layout.rightInset}px`);
   assert.ok(layout.actionRects.length >= 2);
-  assert.ok(layout.actionRects.every(({ width, height }) => width === height && Math.abs(width - layout.checkboxWidth) <= 2));
+  assert.ok(layout.actionRects.every(({ width, height }) => width === 18 && height === 18));
   assert.equal(layout.hyphens, 'auto');
   assert.equal(layout.overflowWrap, 'anywhere');
   assert.equal(layout.textAlign, 'left');
@@ -461,6 +462,50 @@ test('move menu sends a task to the top of another section', { skip }, async () 
   const current = await model();
   assert.deepEqual(current[0].tasks, ['[ ] one', '[x] three']);
   assert.deepEqual(current[1].tasks, ['[ ] two', '[ ] four']);
+});
+
+test('task drag keeps the handle as the initiator but previews the whole task card', { skip }, async () => {
+  await reloadWithStorage(page, seed());
+  const feedback = await page.evaluate(`(async () => {
+    const row = __t.task('one');
+    const handle = row.querySelector('.drag-handle');
+    const handleRect = handle.getBoundingClientRect();
+    const original = DataTransfer.prototype.setDragImage;
+    let captured = null;
+
+    DataTransfer.prototype.setDragImage = function (element, x, y) {
+      captured = {
+        isTask: element === row,
+        isHandle: element === handle,
+        x,
+        y,
+        width: element.getBoundingClientRect().width,
+        rowWidth: row.getBoundingClientRect().width,
+      };
+    };
+
+    try {
+      const dataTransfer = new DataTransfer();
+      handle.dispatchEvent(new DragEvent('dragstart', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer,
+        clientX: handleRect.left + handleRect.width / 2,
+        clientY: handleRect.top + handleRect.height / 2,
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      handle.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer }));
+      return captured;
+    } finally {
+      DataTransfer.prototype.setDragImage = original;
+    }
+  })()`);
+
+  assert.equal(feedback?.isTask, true);
+  assert.equal(feedback?.isHandle, false);
+  assert.equal(feedback?.width, feedback?.rowWidth);
+  assert.ok(feedback?.x >= 0 && feedback?.x <= 20, `unexpected horizontal anchor ${feedback?.x}`);
+  assert.ok(feedback?.y >= 0, `unexpected vertical anchor ${feedback?.y}`);
 });
 
 test('drag and drop reorders tasks, moves them between sections and reorders sections', { skip }, async () => {
