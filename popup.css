@@ -1073,10 +1073,11 @@ body {
 
 /* Task rows */
 .task-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 14px 6px 18px;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: stretch;
+  column-gap: 6px;
+  padding: 6px 4px;
   transition: background 0.1s;
   border-left: 2px solid transparent;
   position: relative;
@@ -1142,9 +1143,9 @@ body {
 .task-checkbox {
   appearance: none;
   -webkit-appearance: none;
-  margin-top: 2px;
-  width: 14px;
-  height: 14px;
+  margin: 0;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
   cursor: pointer;
   border: 1.5px solid var(--input-border);
@@ -1178,12 +1179,35 @@ body {
   mask-position: center;
 }
 
-.task-content { flex: 1; min-width: 0; }
+.task-card,
+.task-content { min-width: 0; }
+
+.task-card {
+  grid-column: 2;
+}
+
+.task-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 18px;
+  margin-bottom: 4px;
+}
+
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
 
 .task-text {
   font-size: 12px;
   line-height: 1.5;
-  word-break: break-word;
+  -webkit-hyphens: auto;
+  hyphens: auto;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-align: left;
   color: var(--text);
 }
 
@@ -1229,7 +1253,7 @@ body {
   font-size: 14px;
   font-family: inherit;
   line-height: 1;
-  padding: 0 2px;
+  padding: 0;
   flex-shrink: 0;
   opacity: 0;
   transition: color 0.15s, opacity 0.15s;
@@ -1246,7 +1270,7 @@ body {
   font-size: 13px;
   font-family: inherit;
   line-height: 1;
-  padding: 0 2px;
+  padding: 0;
   flex-shrink: 0;
   opacity: 0;
   transition: color 0.15s, opacity 0.15s, transform 0.15s;
@@ -1280,7 +1304,7 @@ body {
   font-size: 13px;
   font-family: inherit;
   line-height: 1;
-  padding: 0 2px;
+  padding: 0;
   flex-shrink: 0;
   opacity: 0;
   transition: color 0.15s, opacity 0.15s;
@@ -1290,6 +1314,13 @@ body {
 .task-item.move-open .btn-move { opacity: 1; }
 .btn-move:hover,
 .task-item.move-open .btn-move { color: var(--accent); }
+
+.task-actions > button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
 
 .move-section-menu {
   position: fixed;
@@ -1347,14 +1378,20 @@ body {
 
 /* ── Drag and Drop ── */
 .drag-handle {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  justify-self: start;
+  width: 14px;
+  height: 18px;
   color: var(--text-dim);
   font-size: 13px;
   line-height: 1;
   cursor: grab;
   flex-shrink: 0;
   opacity: 0;
-  padding-right: 2px;
-  margin-top: 1px;
+  padding: 0;
+  margin: 0;
   user-select: none;
   transition: opacity 0.15s;
 }

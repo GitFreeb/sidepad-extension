@@ -2,11 +2,13 @@
 // фиксируют поведение файловых вкладок до и после объединения с Notes API.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Browser, browserExecutable, recordRequests } from './cdp.mjs';
 import { legacyTab, openPopup, reload, reloadWithStorage } from './popup-helpers.mjs';
 
 const executable = browserExecutable();
 const skip = executable ? false : 'Chromium-based browser is not available';
+const popupCss = readFileSync(new URL('../../popup.css', import.meta.url), 'utf8');
 
 let browser;
 let page;
@@ -52,6 +54,67 @@ test('renders sections, tasks and counter from the active file tab', { skip }, a
   assert.equal(await page.evaluate(`document.getElementById('bcFile').textContent`), 'work.md');
   assert.deepEqual(await page.evaluate('__t.tabs()'), ['*work.md', 'dop.md']);
   assert.equal(await page.evaluate(`document.getElementById('apiModeToggle').checked`), false);
+});
+
+test('task cards give text the full control width with compact aligned controls and hyphenation', { skip }, async () => {
+  assert.match(popupCss, /-webkit-hyphens:\s*auto;/);
+  await reloadWithStorage(page, seed());
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 720, deviceScaleFactor: 1, mobile: false });
+
+  const layout = await page.evaluate(`(() => {
+    const row = __t.task('one');
+    const handle = row.querySelector('.drag-handle');
+    const checkbox = row.querySelector('.task-checkbox');
+    const actions = row.querySelector('.task-actions');
+    const text = row.querySelector('.task-text');
+    if (!actions) return { hasActions: false };
+
+    const rowRect = row.getBoundingClientRect();
+    const handleRect = handle.getBoundingClientRect();
+    const checkboxRect = checkbox.getBoundingClientRect();
+    const actionRects = [...actions.querySelectorAll('button')].map((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    });
+    const actionsRect = actions.getBoundingClientRect();
+    const textRect = text.getBoundingClientRect();
+    const textStyle = getComputedStyle(text);
+    return {
+      hasActions: true,
+      handleLeftInset: handleRect.left - rowRect.left,
+      handleCenterDelta: Math.abs((handleRect.top + handleRect.height / 2) - (rowRect.top + rowRect.height / 2)),
+      handleHeight: handleRect.height,
+      checkboxWidth: checkboxRect.width,
+      checkboxHeight: checkboxRect.height,
+      textLeftDelta: Math.abs(textRect.left - checkboxRect.left),
+      textRightDelta: Math.abs(textRect.right - actionsRect.right),
+      textBelowControls: textRect.top >= Math.max(checkboxRect.bottom, actionsRect.bottom) + 3,
+      rightInset: rowRect.right - actionsRect.right,
+      actionRects,
+      hyphens: textStyle.hyphens,
+      overflowWrap: textStyle.overflowWrap,
+      textAlign: textStyle.textAlign,
+      horizontalOverflow: row.scrollWidth > row.clientWidth,
+    };
+  })()`);
+
+  assert.equal(layout.hasActions, true);
+  assert.ok(layout.handleLeftInset <= 6, `drag handle inset is ${layout.handleLeftInset}px`);
+  assert.ok(layout.handleCenterDelta <= 1.5, `drag handle is ${layout.handleCenterDelta}px off centre`);
+  assert.ok(layout.handleHeight < 24, `drag handle unexpectedly spans ${layout.handleHeight}px`);
+  assert.equal(layout.checkboxWidth, layout.checkboxHeight);
+  assert.ok(layout.textLeftDelta <= 1.5, `text starts ${layout.textLeftDelta}px away from the checkbox stack`);
+  assert.ok(layout.textRightDelta <= 1.5, `text ends ${layout.textRightDelta}px away from the action edge`);
+  assert.equal(layout.textBelowControls, true);
+  assert.ok(layout.rightInset >= 3 && layout.rightInset <= 5, `right inset is ${layout.rightInset}px`);
+  assert.ok(layout.actionRects.length >= 2);
+  assert.ok(layout.actionRects.every(({ width, height }) => width === height && Math.abs(width - layout.checkboxWidth) <= 2));
+  assert.equal(layout.hyphens, 'auto');
+  assert.equal(layout.overflowWrap, 'anywhere');
+  assert.equal(layout.textAlign, 'left');
+  assert.equal(layout.horizontalOverflow, false);
+
+  await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
 test('section picker shows and refreshes incomplete over total task counts', { skip }, async () => {

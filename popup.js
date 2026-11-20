@@ -1580,27 +1580,33 @@ function renderTaskItem(task, orderedSections, readOnly) {
 
   return `<li class="task-item ${task.done ? 'done' : ''}${isEditing ? ' editing' : ''}${isMoveOpen ? ' move-open' : ''}" data-id="${task.id}" draggable="false">
     <span class="drag-handle" draggable="${isEditing || readOnly ? 'false' : 'true'}">⠿</span>
-    <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
-    <div class="task-content">
-      ${isEditing
-        ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="${isServerTab() ? SERVER_TEXT_MAX : 240}" draggable="false">`
-        : `<div class="task-text" data-action="edit-text">${escapeHtml(task.text)}</div>`}
-      ${task.url || createdAt ? `<div class="task-meta">
-        ${task.url
-          ? `<a class="task-link" href="${escapeHtml(task.url)}" data-action="link" title="${escapeHtml(task.url)}" draggable="false">${escapeHtml(task.url)}</a>`
-          : ''}
-        ${createdAt
-          ? `<time class="task-created" datetime="${escapeHtml(task.createdAt)}" title="${escapeHtml(createdAtTitle)}">${escapeHtml(createdAt)}</time>`
-          : ''}
-      </div>` : ''}
+    <div class="task-card">
+      <div class="task-controls">
+        <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
+        <div class="task-actions">
+          <button class="btn-copy" data-action="copy" title="${tr('copyTitle')}" draggable="false">⧉</button>
+          ${otherSecs.length > 0 && !readOnly
+            ? `<button class="btn-move" data-action="move-task" title="${tr('moveToTitle')}" draggable="false">→</button>`
+            : ''}
+          ${task.id > 10000 && !readOnly
+            ? `<button class="btn-delete" data-action="delete" title="${tr('deleteTitle')}" draggable="false">×</button>`
+            : ''}
+        </div>
+      </div>
+      <div class="task-content">
+        ${isEditing
+          ? `<input type="text" class="task-edit-input" data-action="edit-input" value="${escapeHtml(task.text)}" maxlength="${isServerTab() ? SERVER_TEXT_MAX : 240}" draggable="false">`
+          : `<div class="task-text" data-action="edit-text">${escapeHtml(task.text)}</div>`}
+        ${task.url || createdAt ? `<div class="task-meta">
+          ${task.url
+            ? `<a class="task-link" href="${escapeHtml(task.url)}" data-action="link" title="${escapeHtml(task.url)}" draggable="false">${escapeHtml(task.url)}</a>`
+            : ''}
+          ${createdAt
+            ? `<time class="task-created" datetime="${escapeHtml(task.createdAt)}" title="${escapeHtml(createdAtTitle)}">${escapeHtml(createdAt)}</time>`
+            : ''}
+        </div>` : ''}
+      </div>
     </div>
-    <button class="btn-copy" data-action="copy" title="${tr('copyTitle')}" draggable="false">⧉</button>
-    ${otherSecs.length > 0 && !readOnly
-      ? `<button class="btn-move" data-action="move-task" title="${tr('moveToTitle')}" draggable="false">→</button>`
-      : ''}
-    ${task.id > 10000 && !readOnly
-      ? `<button class="btn-delete" data-action="delete" title="${tr('deleteTitle')}" draggable="false">×</button>`
-      : ''}
     ${moveMenuHtml}
   </li>`;
 }
