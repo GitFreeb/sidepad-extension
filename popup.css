@@ -1144,12 +1144,12 @@ body {
   appearance: none;
   -webkit-appearance: none;
   margin: 0;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   cursor: pointer;
   border: 1.5px solid var(--input-border);
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--bg);
   position: relative;
   transition: background 0.15s, border-color 0.15s;
@@ -1171,8 +1171,8 @@ body {
   background: var(--bg);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.3l3.2 3.2 5.8-6.8' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.3l3.2 3.2 5.8-6.8' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  -webkit-mask-size: 11px 11px;
-  mask-size: 11px 11px;
+  -webkit-mask-size: 9px 9px;
+  mask-size: 9px 9px;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
