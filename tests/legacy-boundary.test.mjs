@@ -42,13 +42,14 @@ test('selected section joins square to its canvas and the following header', asy
   assert.doesNotMatch(css, /calc\(var\(--radius\) \+ 1px\)/);
 });
 
-test('fixed toolbar occludes the complete sticky-header scroll corridor', async () => {
+test('toolbar cover stays opaque above the scrolling task list', async () => {
   const css = await read('popup.css');
 
   assert.match(css, /--task-list-top-pad:\s*6px;/);
   assert.match(css, /--section-sticky-inset:\s*4px;/);
   assert.match(css, /\.toolbar\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*2;/s);
-  assert.match(css, /\.toolbar::after\s*\{[^}]*content:\s*['"]['"];[^}]*position:\s*absolute;[^}]*top:\s*100%;[^}]*height:\s*calc\(var\(--task-list-top-pad\) \+ var\(--section-sticky-inset\)\);[^}]*background:\s*var\(--bg\);/s);
+  assert.match(css, /\.toolbar::after\s*\{[^}]*content:\s*['"]['"];[^}]*position:\s*absolute;[^}]*top:\s*100%;[^}]*background:\s*var\(--bg\);/s);
+  assert.match(css, /height:\s*var\(--sticky-cover-height,\s*calc\(var\(--task-list-top-pad\) \+ var\(--section-sticky-inset\)\)\);/);
   assert.match(css, /\.task-list\s*\{[^}]*padding:\s*var\(--task-list-top-pad\) 0 8px;/s);
   assert.match(css, /\.section-header\s*\{[^}]*top:\s*var\(--section-sticky-inset\);/s);
 });
