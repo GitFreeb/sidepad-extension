@@ -217,7 +217,7 @@ test('section selection reveals its header at the top and shades one flush conte
     const otherHeader = __t.section('Alpha');
     const nextHeader = __t.section('Gamma');
     const group = header.closest('.section-group');
-    const canvas = group.querySelector('.section-body');
+    const body = group.querySelector('.section-body');
     const contentCanvas = group.querySelector('.section-content');
     const nextBody = nextHeader.closest('.section-body');
     const listStyle = getComputedStyle(list);
@@ -239,16 +239,19 @@ test('section selection reveals its header at the top and shades one flush conte
       headerTargeted: header.classList.contains('section-picker-target'),
       headerBackground: headerStyle.backgroundColor,
       otherHeaderBackground: getComputedStyle(otherHeader).backgroundColor,
-      canvasBackground: getComputedStyle(canvas).backgroundColor,
+      bodyBackground: getComputedStyle(body).backgroundColor,
       contentCanvasBackground: getComputedStyle(contentCanvas).backgroundColor,
       nextHeaderUnderlay: getComputedStyle(nextBody).backgroundImage,
+      headerTopRadius: headerStyle.borderTopLeftRadius,
+      headerBottomRadius: headerStyle.borderBottomLeftRadius,
+      nextHeaderTopRadius: getComputedStyle(nextHeader).borderTopLeftRadius,
+      nextHeaderBottomRadius: getComputedStyle(nextHeader).borderBottomLeftRadius,
       contentBackgrounds: content.map((item) => getComputedStyle(item).backgroundColor),
       targetBackground,
-      leftDelta: Math.abs(canvas.getBoundingClientRect().left - header.getBoundingClientRect().left),
-      rightDelta: Math.abs(canvas.getBoundingClientRect().right - header.getBoundingClientRect().right),
-      headerUnderlayGap: Math.abs(canvas.getBoundingClientRect().top - header.getBoundingClientRect().top),
+      leftDelta: Math.abs(contentCanvas.getBoundingClientRect().left - header.getBoundingClientRect().left),
+      rightDelta: Math.abs(contentCanvas.getBoundingClientRect().right - header.getBoundingClientRect().right),
       topGap: Math.abs(contentCanvas.getBoundingClientRect().top - header.getBoundingClientRect().bottom),
-      bottomGap: Math.abs(nextHeader.getBoundingClientRect().top - canvas.getBoundingClientRect().bottom),
+      bottomGap: Math.abs(nextHeader.getBoundingClientRect().top - contentCanvas.getBoundingClientRect().bottom),
       taskDraft: document.getElementById('taskInput').value,
       linkDraft: document.getElementById('linkInput').value,
     };
@@ -260,18 +263,48 @@ test('section selection reveals its header at the top and shades one flush conte
   assert.equal(state.groupTargeted, true);
   assert.equal(state.headerTargeted, false);
   assert.equal(state.headerBackground, state.otherHeaderBackground);
-  assert.equal(state.canvasBackground, state.targetBackground);
-  assert.equal(state.contentCanvasBackground, 'rgba(0, 0, 0, 0)');
-  assert.notEqual(state.nextHeaderUnderlay, 'none');
+  assert.equal(state.bodyBackground, 'rgba(0, 0, 0, 0)');
+  assert.equal(state.contentCanvasBackground, state.targetBackground);
+  assert.equal(state.nextHeaderUnderlay, 'none');
+  assert.equal(state.headerTopRadius, '6px');
+  assert.equal(state.headerBottomRadius, '0px');
+  assert.equal(state.nextHeaderTopRadius, '0px');
+  assert.equal(state.nextHeaderBottomRadius, '6px');
   assert.ok(state.contentBackgrounds.every((background) => background === 'rgba(0, 0, 0, 0)'));
   assert.ok(state.leftDelta <= 1, `content canvas starts ${state.leftDelta}px away from the header`);
   assert.ok(state.rightDelta <= 1, `content canvas ends ${state.rightDelta}px away from the header`);
-  assert.ok(state.headerUnderlayGap <= 1, `content canvas starts ${state.headerUnderlayGap}px below the header top`);
   assert.ok(state.topGap <= 1, `content canvas starts ${state.topGap}px below the header`);
   assert.ok(state.bottomGap <= 1, `content canvas ends ${state.bottomGap}px before the next header`);
   assert.equal(state.taskDraft, 'draft task');
   assert.equal(state.linkDraft, 'https://example.test/draft');
   assert.deepEqual((await model())[1].tasks, ['[ ] beta one', '[ ] beta two']);
+
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Gamma"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  })()`);
+  await new Promise((resolve) => setTimeout(resolve, 900));
+  const lastState = await page.evaluate(`(() => {
+    const header = __t.section('Gamma');
+    const content = header.closest('.section-group').querySelector('.section-content');
+    const headerStyle = getComputedStyle(header);
+    const contentStyle = getComputedStyle(content);
+    return {
+      lastClass: header.closest('.section-group').classList.contains('section-last'),
+      headerTopRadius: headerStyle.borderTopLeftRadius,
+      headerBottomRadius: headerStyle.borderBottomLeftRadius,
+      contentTopRadius: contentStyle.borderTopLeftRadius,
+      contentBottomRadius: contentStyle.borderBottomLeftRadius,
+    };
+  })()`);
+  assert.deepEqual(lastState, {
+    lastClass: true,
+    headerTopRadius: '6px',
+    headerBottomRadius: '0px',
+    contentTopRadius: '0px',
+    contentBottomRadius: '6px',
+  });
 
   await page.send('Emulation.clearDeviceMetricsOverride');
 });

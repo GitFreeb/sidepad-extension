@@ -1653,7 +1653,7 @@ function render() {
   orderedSections = pinInbox(orderedSections);
 
   let html = '';
-  orderedSections.forEach(title => {
+  orderedSections.forEach((title, sectionIndex) => {
     const items = taskMap.get(title) || [];
     const openItems = items.filter(t => !t.done);
     const doneItems = items.filter(t => t.done);
@@ -1664,7 +1664,7 @@ function render() {
 
     // Своя обёртка у каждой секции ограничивает липкую плашку её секцией:
     // следующая плашка вытесняет предыдущую, а не ложится на неё стопкой.
-    html += `<li class="section-group${title === selectedSection ? ' section-picker-target' : ''}"><ul class="section-body">`;
+    html += `<li class="section-group${title === selectedSection ? ' section-picker-target' : ''}${sectionIndex === orderedSections.length - 1 ? ' section-last' : ''}" data-collapsed="${isCollapsed}"><ul class="section-body">`;
     html += `<li class="section-header${isCollapsed ? ' collapsed' : ''}${pinned ? ' inbox' : ''}" data-section="${escapeHtml(title)}" data-action="toggle-section" draggable="${isRenaming || readOnly || pinned ? 'false' : 'true'}">
       ${isRenaming
         ? `<input class="section-rename-input" data-rename-section="${escapeHtml(title)}" value="${escapeHtml(title)}" maxlength="${isServerTab() ? SERVER_SECTION_MAX : 80}" draggable="false">`
