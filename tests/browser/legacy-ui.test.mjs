@@ -843,6 +843,18 @@ test('sticky section headers never pile up or cover their first task after scrol
       l.scrollTop += group.getBoundingClientRect().top - l.getBoundingClientRect().top + 60;
     })()`);
     await new Promise((resolve) => setTimeout(resolve, 100));
+    const corridor = await page.evaluate(`(() => {
+      const list = document.getElementById('taskList').getBoundingClientRect();
+      const header = __t.section('S5').getBoundingClientRect();
+      const hit = document.elementFromPoint(header.left + 40, (list.top + header.top) / 2);
+      return {
+        gap: header.top - list.top,
+        hitClass: hit?.className || '',
+        occludedByToolbar: hit?.classList.contains('toolbar') || false,
+      };
+    })()`);
+    assert.ok(corridor.gap >= 9.5 && corridor.gap <= 10.5, JSON.stringify(corridor));
+    assert.equal(corridor.occludedByToolbar, true, JSON.stringify(corridor));
     await page.evaluate(`__t.section('S5').click()`);
     await new Promise((resolve) => setTimeout(resolve, 100));
     await page.evaluate(`__t.section('S5').click()`);

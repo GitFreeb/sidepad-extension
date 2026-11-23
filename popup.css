@@ -21,6 +21,8 @@
   --tab-bg:        #1c1c1e;
   --tab-active:    #2c2c2e;
   --section-target-bg: rgba(255, 255, 255, 0.045);
+  --task-list-top-pad: 6px;
+  --section-sticky-inset: 4px;
 
   --radius: 6px;
   --font-ui:   -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -825,6 +827,8 @@ body {
 
 /* ── Toolbar ── */
 .toolbar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -832,6 +836,18 @@ body {
   background: var(--surface2);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+/* Неподвижная панель закрывает технический зазор до sticky-плашки:
+   прокручиваемые задачи не просвечивают и не получают клики над заголовком. */
+.toolbar::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: calc(var(--task-list-top-pad) + var(--section-sticky-inset));
+  background: var(--bg);
 }
 
 .btn-upload,
@@ -896,7 +912,7 @@ body {
   flex: 1;
   list-style: none;
   overflow-y: auto;
-  padding: 6px 0 8px;
+  padding: var(--task-list-top-pad) 0 8px;
 }
 
 .task-list::-webkit-scrollbar { width: 3px; }
@@ -927,7 +943,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   position: sticky;
-  top: 4px;
+  top: var(--section-sticky-inset);
   z-index: 1;
   cursor: grab;
   user-select: none;
