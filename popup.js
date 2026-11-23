@@ -1564,6 +1564,37 @@ function scrollSectionToTop(section) {
   list.scrollTo({ top: targetTop, behavior: 'auto' });
 }
 
+function syncStickyHeaderCover() {
+  const list = document.getElementById('taskList');
+  const toolbar = document.querySelector('.toolbar');
+  const listRect = list.getBoundingClientRect();
+  const headers = list.querySelectorAll('.section-header');
+  if (!headers.length) {
+    toolbar.style.setProperty('--sticky-cover-height', '0px');
+    return;
+  }
+
+  const stickyTop = listRect.top
+    + (parseFloat(getComputedStyle(list).paddingTop) || 0)
+    + (parseFloat(getComputedStyle(headers[0]).top) || 0);
+  let first = null;
+  let next = null;
+  for (const header of headers) {
+    const rect = header.getBoundingClientRect();
+    if (rect.top < listRect.top || rect.top >= listRect.bottom || rect.bottom <= listRect.top) continue;
+    if (!first) first = rect;
+    else { next = rect; break; }
+  }
+
+  // Уходящая плашка не должна проступать над входящей секцией.
+  const visible = first?.top < stickyTop - 0.5 && next ? next : first;
+  toolbar.style.setProperty('--sticky-cover-height', `${visible ? visible.top - listRect.top : 0}px`);
+}
+
+const taskListForCover = document.getElementById('taskList');
+taskListForCover.addEventListener('scroll', syncStickyHeaderCover, { passive: true });
+new ResizeObserver(syncStickyHeaderCover).observe(taskListForCover);
+
 function renderTaskItem(task, orderedSections, readOnly) {
   const isEditing    = task.id === editingId;
   const isMoveOpen   = task.id === moveMenuTaskId;
@@ -1636,6 +1667,7 @@ function render() {
     if (isDefault) {
       document.getElementById('loadExampleBtn')?.addEventListener('click', loadExample);
     }
+    syncStickyHeaderCover();
     return;
   }
 
@@ -1728,6 +1760,7 @@ function render() {
     pendingSectionReveal = null;
     scrollSectionToTop(section);
   }
+  syncStickyHeaderCover();
 }
 
 /* ── Section rename ── */

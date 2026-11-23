@@ -863,3 +863,35 @@ test('sticky section headers never pile up or cover their first task after scrol
   }
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
+
+test('the top edge hides previous content throughout a section handoff', { skip }, async () => {
+  const sections = Array.from({ length: 5 }, (_, s) => [`S${s}`, Array.from({ length: 7 }, (_, t) => `task ${s}.${t}`)]);
+  await reloadWithStorage(page, { tabs: [legacyTab('tab_handoff', 'handoff', sections)], activeTabId: 'tab_handoff' });
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 640, deviceScaleFactor: 1, mobile: false });
+
+  for (const name of ['S1', 'S2', 'S3']) {
+    const result = await page.evaluate(`(async () => {
+      const list = document.getElementById('taskList');
+      const header = __t.section('${name}');
+      const top = list.getBoundingClientRect().top;
+      list.scrollTop += header.getBoundingClientRect().top - top - 35;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const rect = header.getBoundingClientRect();
+      const x = rect.left + 40;
+      let exposed = null;
+      for (let y = Math.ceil(top + 1); y < Math.floor(rect.top - 1); y += 2) {
+        const hit = document.elementFromPoint(x, y);
+        if (hit?.closest('.task-item, .section-header')) { exposed = { y, className: hit.className }; break; }
+      }
+      return {
+        gap: rect.top - top,
+        exposed,
+        headerVisible: Boolean(document.elementFromPoint(x, rect.top + 3)?.closest('.section-header')),
+      };
+    })()`);
+    assert.ok(result.gap >= 25 && result.gap <= 50, JSON.stringify({ name, ...result }));
+    assert.equal(result.exposed, null, JSON.stringify({ name, ...result }));
+    assert.equal(result.headerVisible, true, JSON.stringify({ name, ...result }));
+  }
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});

@@ -838,15 +838,14 @@ body {
   flex-shrink: 0;
 }
 
-/* Неподвижная панель закрывает технический зазор до sticky-плашки:
-   прокручиваемые задачи не просвечивают и не получают клики над заголовком. */
+/* Неподвижная панель закрывает всё до верхней видимой плашки, включая смену секций. */
 .toolbar::after {
   content: '';
   position: absolute;
   top: 100%;
   left: 0;
   right: 0;
-  height: calc(var(--task-list-top-pad) + var(--section-sticky-inset));
+  height: var(--sticky-cover-height, calc(var(--task-list-top-pad) + var(--section-sticky-inset)));
   background: var(--bg);
 }
 
