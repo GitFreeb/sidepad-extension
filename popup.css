@@ -938,28 +938,24 @@ body {
   margin: 0 10px;
 }
 
-/* Подложка лежит под всей выбранной секцией, включая скругления заголовка. */
-.section-group.section-picker-target .section-body {
-  margin: 8px 10px 0;
+/* Выбранная секция — единая составная форма без фоновых подслоёв:
+   заголовок закрывает верх, content — середину, следующая плашка — низ. */
+.section-group.section-picker-target[data-collapsed="false"] .section-header {
+  margin-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.section-group.section-picker-target[data-collapsed="false"] .section-content {
   background: var(--section-target-bg);
 }
 
-.section-group.section-picker-target .section-header {
-  margin: 0;
-}
-
-.section-group.section-picker-target .section-content {
-  margin-inline: 0;
-}
-
-/* Короткий подслой закрывает верхние скругления следующей плашки. */
-.section-group.section-picker-target + .section-group .section-body {
-  background: linear-gradient(var(--section-target-bg), var(--section-target-bg))
-    no-repeat 10px 0 / calc(100% - 20px) calc(var(--radius) + 1px);
-}
-
-.section-group.section-picker-target + .section-group .section-header {
+.section-group.section-picker-target[data-collapsed="false"] + .section-group .section-header {
   margin-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.section-group.section-picker-target.section-last[data-collapsed="false"] .section-content {
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 
 .section-header:hover {

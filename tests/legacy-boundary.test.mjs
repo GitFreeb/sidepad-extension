@@ -29,6 +29,19 @@ test('there is a single Sidepad UI: no separate API application remains', async 
   assert.doesNotMatch(html, /add via API|api-task-form|api-document/);
 });
 
+test('selected section joins square to its canvas and the following header', async () => {
+  const css = await read('popup.css');
+  const source = await read('popup.js');
+
+  assert.match(source, /section-last/);
+  assert.match(source, /data-collapsed="\$\{isCollapsed\}"/);
+  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-header\s*\{[^}]*border-radius:\s*var\(--radius\) var\(--radius\) 0 0;/s);
+  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-content\s*\{[^}]*background:\s*var\(--section-target-bg\);/s);
+  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \+ \.section-group \.section-header\s*\{[^}]*border-radius:\s*0 0 var\(--radius\) var\(--radius\);/s);
+  assert.match(css, /\.section-group\.section-picker-target\.section-last\[data-collapsed="false"\] \.section-content\s*\{[^}]*border-radius:\s*0 0 var\(--radius\) var\(--radius\);/s);
+  assert.doesNotMatch(css, /calc\(var\(--radius\) \+ 1px\)/);
+});
+
 test('manifest grants no Notes API host access until the optional permission is requested', async () => {
   const manifest = JSON.parse(await read('manifest.json'));
   assert.equal(manifest.permissions.includes('https://notes.lab/*'), false);
