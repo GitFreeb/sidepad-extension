@@ -25,9 +25,10 @@
   --section-target-solid: #262628;
   --section-bar-bg: #333335;
   --section-divider: #515154;
-  --task-list-top-pad: 6px;
-  --section-sticky-inset: 4px;
+  --task-list-top-pad: 0px;
+  --section-sticky-inset: 0px;
   --section-task-gap: 2px;
+  --section-task-top-gap: 3px;
   --sticky-cover-overhang: 5px;
 
   --radius: 6px;
@@ -999,7 +1000,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: var(--section-task-gap) 0;
+  margin: var(--section-task-gap) 0 var(--section-task-top-gap);
   padding: 6px 14px;
   background: var(--section-bar-bg);
   border: 0;
@@ -1013,19 +1014,19 @@ body {
   transition: background 0.15s, border-color 0.15s;
 }
 
-.section-group:first-child .section-header { margin-top: 8px; }
+.section-group:first-child .section-header { margin-top: 0; }
 
 /* Только верхняя актуальная плашка видна поверх неподвижной защитной полосы. */
 .section-header.sticky-cover-front { z-index: 3; }
 
-/* Восстановить верх первых пикселей задачи под маской после зазора 2 px. */
+/* Восстановить верх первых пикселей задачи под маской после зазора. */
 .section-header.sticky-cover-front::after {
   content: '';
   position: absolute;
-  top: calc(100% + var(--section-task-gap));
+  top: calc(100% + var(--section-task-top-gap));
   left: 0;
   right: 0;
-  height: calc(var(--sticky-cover-overhang) - var(--section-task-gap));
+  height: calc(var(--sticky-cover-overhang) - var(--section-task-top-gap));
   background: var(--bg);
   pointer-events: none;
 }
@@ -1034,9 +1035,9 @@ body {
   background: linear-gradient(var(--section-target-bg), var(--section-target-bg)), var(--bg);
 }
 
-/* Защитная маска не должна затемнять 2 px выбранной подложки под липким заголовком. */
+/* Защитная маска не должна затемнять зазор выбранной подложки. */
 .section-group.section-picker-target[data-collapsed="false"] .section-header.sticky-cover-front {
-  box-shadow: 0 var(--section-task-gap) 0 var(--section-target-solid);
+  box-shadow: 0 var(--section-task-top-gap) 0 var(--section-target-solid);
 }
 
 /* Первой задаче сохранить подсветку и тонкую левую линию под заголовком. */
@@ -1049,7 +1050,7 @@ body {
   margin: 0;
 }
 
-/* Два геометрических зазора сохраняются, но окрашиваются как единое полотно. */
+/* Верхний и нижний зазоры сохраняются, но окрашиваются как единое полотно. */
 .section-group.section-picker-target[data-collapsed="false"] .section-header {
   margin-bottom: 0;
   border-bottom-color: transparent;
@@ -1057,7 +1058,7 @@ body {
 
 .section-group.section-picker-target[data-collapsed="false"] .section-content {
   background: var(--section-target-bg);
-  padding-top: var(--section-task-gap);
+  padding-top: var(--section-task-top-gap);
   padding-bottom: var(--section-task-gap);
 }
 
@@ -1247,22 +1248,30 @@ body {
   appearance: none;
   -webkit-appearance: none;
   margin: 0;
+  /* Сохраняем область нажатия 14 px, рисуем рамку 10 px по центру. */
   width: 14px;
   height: 14px;
   flex-shrink: 0;
   cursor: pointer;
-  border: 1.5px solid var(--input-border);
-  border-radius: 3px;
-  background: var(--bg);
+  border: 0;
+  background: transparent;
   position: relative;
+}
+
+.task-checkbox::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border: 1px solid var(--input-border);
+  border-radius: 2px;
+  background: var(--bg);
   transition: background 0.15s, border-color 0.15s;
 }
 
-.task-checkbox:hover {
-  border-color: var(--accent);
-}
+.task-checkbox:hover::before { border-color: var(--accent); }
+.task-checkbox:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.task-checkbox:checked {
+.task-checkbox:checked::before {
   background: var(--accent);
   border-color: var(--accent);
 }
@@ -1270,12 +1279,12 @@ body {
 .task-checkbox:checked::after {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: 2px;
   background: var(--bg);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.3l3.2 3.2 5.8-6.8' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.3l3.2 3.2 5.8-6.8' fill='none' stroke='black' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  -webkit-mask-size: 9px 9px;
-  mask-size: 9px 9px;
+  -webkit-mask-size: 8px 8px;
+  mask-size: 8px 8px;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
