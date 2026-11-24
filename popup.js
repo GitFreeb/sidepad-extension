@@ -1632,9 +1632,9 @@ function renderTaskItem(task, orderedSections, readOnly) {
 
   return `<li class="task-item ${task.done ? 'done' : ''}${isEditing ? ' editing' : ''}${isMoveOpen ? ' move-open' : ''}" data-id="${task.id}" draggable="false">
     <span class="drag-handle" draggable="${isEditing || readOnly ? 'false' : 'true'}">⠿</span>
+    <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
     <div class="task-card">
       <div class="task-controls">
-        <input type="checkbox" class="task-checkbox" data-action="toggle" ${task.done ? 'checked' : ''}${readOnly ? ' disabled' : ''} draggable="false">
         <div class="task-actions">
           <button class="btn-copy" data-action="copy" title="${tr('copyTitle')}" draggable="false">⧉</button>
           ${otherSecs.length > 0 && !readOnly
