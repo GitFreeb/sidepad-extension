@@ -118,7 +118,7 @@ test('task cards give text the full control width with compact aligned controls 
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
-test('first task hover keeps the section gap and left accent', { skip }, async () => {
+test('first task hover meets the header with a thin left accent', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 640, deviceScaleFactor: 1, mobile: false });
   await page.evaluate(`(() => {
@@ -145,16 +145,20 @@ test('first task hover keeps the section gap and left accent', { skip }, async (
       coverHeight: parseFloat(cover.height),
       coverBackground: cover.backgroundColor,
       coverBorder: cover.borderLeftColor,
+      coverBorderWidth: cover.borderLeftWidth,
       taskBackground: taskStyle.backgroundColor,
       taskBorder: taskStyle.borderLeftColor,
+      taskBorderWidth: taskStyle.borderLeftWidth,
     };
   })()`);
   assert.equal(state.front, true, JSON.stringify(state));
   assert.equal(state.hovered, true, JSON.stringify(state));
-  assert.ok(Math.abs(state.gap - 2) <= 1, JSON.stringify(state));
+  assert.ok(Math.abs(state.gap) <= 1, JSON.stringify(state));
   assert.ok(state.coverHeight > 0, JSON.stringify(state));
   assert.equal(state.coverBackground, state.taskBackground, JSON.stringify(state));
   assert.equal(state.coverBorder, state.taskBorder, JSON.stringify(state));
+  assert.equal(state.coverBorderWidth, '1px', JSON.stringify(state));
+  assert.equal(state.taskBorderWidth, '1px', JSON.stringify(state));
   await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
   await page.send('Emulation.clearDeviceMetricsOverride');
 });

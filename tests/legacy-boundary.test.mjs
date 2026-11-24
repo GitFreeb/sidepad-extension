@@ -29,15 +29,18 @@ test('there is a single Sidepad UI: no separate API application remains', async 
   assert.doesNotMatch(html, /add via API|api-task-form|api-document/);
 });
 
-test('selected and ordinary sections share small rounded gaps', async () => {
+test('section headers and task canvas form full-width square strips', async () => {
   const css = await read('popup.css');
   const source = await read('popup.js');
 
   assert.match(source, /section-last/);
   assert.match(source, /data-collapsed="\$\{isCollapsed\}"/);
-  assert.match(css, /--section-task-gap:\s*2px;/);
-  assert.match(css, /\.section-header\s*\{[^}]*margin:\s*var\(--section-task-gap\) 10px;/s);
-  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-content\s*\{[^}]*background:\s*var\(--section-target-bg\);[^}]*border-radius:\s*var\(--radius\);/s);
+  assert.match(css, /--section-task-gap:\s*0px;/);
+  assert.match(css, /\.section-group \+ \.section-group\s*\{\s*margin-top:\s*18px;/);
+  assert.match(css, /\.section-header\s*\{[^}]*margin:\s*0;[^}]*border-bottom:\s*1px solid var\(--section-divider\);[^}]*border-radius:\s*0;/s);
+  assert.match(css, /\.section-content\s*\{\s*margin:\s*0;/);
+  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-content\s*\{[^}]*background:\s*var\(--section-target-bg\);/s);
+  assert.match(css, /\.task-item\s*\{[^}]*border-left:\s*1px solid transparent;/s);
   assert.doesNotMatch(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-header\s*\{[^}]*margin-bottom:\s*0;/s);
   assert.doesNotMatch(css, /calc\(var\(--radius\) \+ 1px\)/);
 });
