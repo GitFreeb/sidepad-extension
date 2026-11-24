@@ -184,6 +184,9 @@ test('task scrollbar overlays the full-width section and fades after scrolling',
       gutter: list.offsetWidth - list.clientWidth,
       scrollbarWidth: getComputedStyle(list).scrollbarWidth,
       rightDelta: Math.abs(overlay.getBoundingClientRect().right - header.getBoundingClientRect().right),
+      decorative: overlay.getAttribute('aria-hidden') === 'true',
+      pointerEvents: getComputedStyle(overlay).pointerEvents,
+      thumbWidth: getComputedStyle(overlay.querySelector('.task-scrollbar-thumb'), '::after').width,
     };
   })()`);
   assert.equal(state.ready, true);
@@ -192,6 +195,9 @@ test('task scrollbar overlays the full-width section and fades after scrolling',
   assert.equal(state.gutter, 0);
   assert.equal(state.scrollbarWidth, 'none');
   assert.ok(state.rightDelta <= 1, JSON.stringify(state));
+  assert.equal(state.decorative, true);
+  assert.equal(state.pointerEvents, 'none');
+  assert.equal(state.thumbWidth, '2px');
 
   await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
   await page.evaluate(`document.getElementById('taskList').scrollTop = 120`);
@@ -310,6 +316,8 @@ test('section selection reveals its header at the top with uniform gaps and a sh
       + parseFloat(listStyle.paddingTop)
       + parseFloat(headerStyle.top);
     const content = [...group.querySelectorAll('.task-item, .section-empty')];
+    const firstTask = content[0];
+    const lastTask = content[content.length - 1];
     const probe = document.createElement('span');
     probe.style.background = 'var(--section-target-bg)';
     document.body.append(probe);
@@ -325,6 +333,9 @@ test('section selection reveals its header at the top with uniform gaps and a sh
       otherHeaderBackground: getComputedStyle(otherHeader).backgroundColor,
       bodyBackground: getComputedStyle(body).backgroundColor,
       contentCanvasBackground: getComputedStyle(contentCanvas).backgroundColor,
+      selectedHeaderBorder: headerStyle.borderBottomColor,
+      selectedContentPaddingTop: getComputedStyle(contentCanvas).paddingTop,
+      selectedContentPaddingBottom: getComputedStyle(contentCanvas).paddingBottom,
       nextHeaderUnderlay: getComputedStyle(nextBody).backgroundImage,
       headerTopRadius: headerStyle.borderTopLeftRadius,
       headerBottomRadius: headerStyle.borderBottomLeftRadius,
@@ -334,8 +345,10 @@ test('section selection reveals its header at the top with uniform gaps and a sh
       targetBackground,
       leftDelta: Math.abs(contentCanvas.getBoundingClientRect().left - header.getBoundingClientRect().left),
       rightDelta: Math.abs(contentCanvas.getBoundingClientRect().right - header.getBoundingClientRect().right),
-      topGap: Math.abs(contentCanvas.getBoundingClientRect().top - header.getBoundingClientRect().bottom),
-      bottomGap: Math.abs(nextHeader.getBoundingClientRect().top - contentCanvas.getBoundingClientRect().bottom),
+      topSeam: Math.abs(contentCanvas.getBoundingClientRect().top - header.getBoundingClientRect().bottom),
+      bottomSeam: Math.abs(nextHeader.getBoundingClientRect().top - contentCanvas.getBoundingClientRect().bottom),
+      topGap: Math.abs(firstTask.getBoundingClientRect().top - header.getBoundingClientRect().bottom),
+      bottomGap: Math.abs(nextHeader.getBoundingClientRect().top - lastTask.getBoundingClientRect().bottom),
       taskDraft: document.getElementById('taskInput').value,
       linkDraft: document.getElementById('linkInput').value,
     };
@@ -349,6 +362,9 @@ test('section selection reveals its header at the top with uniform gaps and a sh
   assert.equal(state.headerBackground, state.otherHeaderBackground);
   assert.equal(state.bodyBackground, 'rgba(0, 0, 0, 0)');
   assert.equal(state.contentCanvasBackground, state.targetBackground);
+  assert.equal(state.selectedHeaderBorder, 'rgba(0, 0, 0, 0)');
+  assert.equal(state.selectedContentPaddingTop, '2px');
+  assert.equal(state.selectedContentPaddingBottom, '2px');
   assert.equal(state.nextHeaderUnderlay, 'none');
   assert.equal(state.headerTopRadius, '0px');
   assert.equal(state.headerBottomRadius, '0px');
@@ -357,6 +373,8 @@ test('section selection reveals its header at the top with uniform gaps and a sh
   assert.ok(state.contentBackgrounds.every((background) => background === 'rgba(0, 0, 0, 0)'));
   assert.ok(state.leftDelta <= 1, `content canvas starts ${state.leftDelta}px away from the header`);
   assert.ok(state.rightDelta <= 1, `content canvas ends ${state.rightDelta}px away from the header`);
+  assert.ok(state.topSeam <= 1, `selected canvas starts ${state.topSeam}px below the header`);
+  assert.ok(state.bottomSeam <= 1, `selected canvas ends ${state.bottomSeam}px before the next header`);
   assert.ok(Math.abs(state.topGap - 2) <= 1, `content canvas starts ${state.topGap}px below the header`);
   assert.ok(Math.abs(state.bottomGap - 2) <= 1, `content canvas ends ${state.bottomGap}px before the next header`);
   assert.equal(state.taskDraft, 'draft task');

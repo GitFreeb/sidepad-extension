@@ -19,10 +19,10 @@
   --link:          #f0a93b;
   --scrollbar:     #3a3a3c;
   --overlay-thumb: rgba(230, 237, 243, 0.35);
-  --overlay-thumb-active: rgba(230, 237, 243, 0.55);
   --tab-bg:        #1c1c1e;
   --tab-active:    #2c2c2e;
   --section-target-bg: rgba(255, 255, 255, 0.045);
+  --section-target-solid: #262628;
   --section-bar-bg: #333335;
   --section-divider: #515154;
   --task-list-top-pad: 6px;
@@ -55,10 +55,10 @@
   --link:          #48603a;
   --scrollbar:     #cdc6b4;
   --overlay-thumb: rgba(20, 28, 39, 0.30);
-  --overlay-thumb-active: rgba(20, 28, 39, 0.50);
   --tab-bg:        #ede8da;
   --tab-active:    #f5f0e6;
   --section-target-bg: rgba(72, 96, 58, 0.06);
+  --section-target-solid: #ebe7dc;
   --section-bar-bg: #e8e2d5;
   --section-divider: #cdc6b4;
 }
@@ -934,7 +934,7 @@ body {
 .task-list::-webkit-scrollbar { width: 3px; }
 .task-list::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
 
-/* Скроллбар поверх полотна, без постоянной полосы справа. */
+/* Исчезающий индикатор поверх полотна, без постоянной полосы справа. */
 .task-viewport.overlay-scrollbar-ready .task-list { scrollbar-width: none; }
 .task-viewport.overlay-scrollbar-ready .task-list::-webkit-scrollbar { width: 0; height: 0; }
 
@@ -944,7 +944,7 @@ body {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 14px;
+  width: 8px;
   opacity: 0;
   pointer-events: none;
   user-select: none;
@@ -952,24 +952,16 @@ body {
 }
 
 .task-scrollbar.is-visible,
-.task-scrollbar.is-dragging,
-.task-scrollbar:focus-visible { opacity: 1; }
-
-.task-scrollbar:focus { outline: none; }
+.task-scrollbar.is-visible { opacity: 1; }
 
 .task-scrollbar-thumb {
   position: absolute;
   top: 0;
   right: 0;
-  width: 14px;
+  width: 8px;
   min-height: 28px;
-  cursor: ns-resize;
-  touch-action: none;
   will-change: transform;
 }
-
-.task-scrollbar.is-visible .task-scrollbar-thumb,
-.task-scrollbar.is-dragging .task-scrollbar-thumb { pointer-events: auto; }
 
 .task-scrollbar-thumb::after {
   content: '';
@@ -977,16 +969,10 @@ body {
   top: 0;
   right: 2px;
   bottom: 0;
-  width: 3px;
+  width: 2px;
   border-radius: 999px;
   background: var(--overlay-thumb);
   transition: background-color 150ms ease-out;
-}
-
-.task-scrollbar.is-visible .task-scrollbar-thumb:hover::after,
-.task-scrollbar:focus-visible .task-scrollbar-thumb::after,
-.task-scrollbar.is-dragging .task-scrollbar-thumb::after {
-  background: var(--overlay-thumb-active);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1032,7 +1018,7 @@ body {
 /* Только верхняя актуальная плашка видна поверх неподвижной защитной полосы. */
 .section-header.sticky-cover-front { z-index: 3; }
 
-/* Восстановить верх первых пикселей задачи под маской без разрыва с заголовком. */
+/* Восстановить верх первых пикселей задачи под маской после зазора 2 px. */
 .section-header.sticky-cover-front::after {
   content: '';
   position: absolute;
@@ -1048,6 +1034,11 @@ body {
   background: linear-gradient(var(--section-target-bg), var(--section-target-bg)), var(--bg);
 }
 
+/* Защитная маска не должна затемнять 2 px выбранной подложки под липким заголовком. */
+.section-group.section-picker-target[data-collapsed="false"] .section-header.sticky-cover-front {
+  box-shadow: 0 var(--section-task-gap) 0 var(--section-target-solid);
+}
+
 /* Первой задаче сохранить подсветку и тонкую левую линию под заголовком. */
 .section-header.sticky-cover-front:has(+ .section-content > .section-tasks > .task-item:first-child:hover)::after {
   background: var(--hover);
@@ -1058,9 +1049,20 @@ body {
   margin: 0;
 }
 
-/* Подложка выбранной секции занимает ту же ширину, что и заголовок. */
+/* Два геометрических зазора сохраняются, но окрашиваются как единое полотно. */
+.section-group.section-picker-target[data-collapsed="false"] .section-header {
+  margin-bottom: 0;
+  border-bottom-color: transparent;
+}
+
 .section-group.section-picker-target[data-collapsed="false"] .section-content {
   background: var(--section-target-bg);
+  padding-top: var(--section-task-gap);
+  padding-bottom: var(--section-task-gap);
+}
+
+.section-group.section-picker-target[data-collapsed="false"] + .section-group .section-header {
+  margin-top: 0;
 }
 
 .section-header:hover {
