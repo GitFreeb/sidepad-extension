@@ -24,11 +24,9 @@
   --section-target-bg: rgba(255, 255, 255, 0.045);
   --section-target-solid: #262628;
   --section-bar-bg: #333335;
-  --section-divider: #515154;
   --task-list-top-pad: 0px;
   --section-sticky-inset: 0px;
   --section-task-gap: 2px;
-  --section-task-top-gap: 3px;
   --sticky-cover-overhang: 5px;
 
   --radius: 6px;
@@ -61,7 +59,6 @@
   --section-target-bg: rgba(72, 96, 58, 0.06);
   --section-target-solid: #ebe7dc;
   --section-bar-bg: #e8e2d5;
-  --section-divider: #cdc6b4;
 }
 
 [data-theme="light"] .task-text {
@@ -1000,18 +997,17 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: var(--section-task-gap) 0 var(--section-task-top-gap);
+  margin: var(--section-task-gap) 0;
   padding: 6px 14px;
   background: var(--section-bar-bg);
   border: 0;
-  border-bottom: 1px solid var(--section-divider);
   border-radius: 0;
   position: sticky;
   top: var(--section-sticky-inset);
   z-index: 1;
   cursor: grab;
   user-select: none;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s;
 }
 
 .section-group:first-child .section-header { margin-top: 0; }
@@ -1023,10 +1019,10 @@ body {
 .section-header.sticky-cover-front::after {
   content: '';
   position: absolute;
-  top: calc(100% + var(--section-task-top-gap));
+  top: calc(100% + var(--section-task-gap));
   left: 0;
   right: 0;
-  height: calc(var(--sticky-cover-overhang) - var(--section-task-top-gap));
+  height: calc(var(--sticky-cover-overhang) - var(--section-task-gap));
   background: var(--bg);
   pointer-events: none;
 }
@@ -1037,7 +1033,7 @@ body {
 
 /* Защитная маска не должна затемнять зазор выбранной подложки. */
 .section-group.section-picker-target[data-collapsed="false"] .section-header.sticky-cover-front {
-  box-shadow: 0 var(--section-task-top-gap) 0 var(--section-target-solid);
+  box-shadow: 0 var(--section-task-gap) 0 var(--section-target-solid);
 }
 
 /* Первой задаче сохранить подсветку и тонкую левую линию под заголовком. */
@@ -1053,12 +1049,11 @@ body {
 /* Верхний и нижний зазоры сохраняются, но окрашиваются как единое полотно. */
 .section-group.section-picker-target[data-collapsed="false"] .section-header {
   margin-bottom: 0;
-  border-bottom-color: transparent;
 }
 
 .section-group.section-picker-target[data-collapsed="false"] .section-content {
   background: var(--section-target-bg);
-  padding-top: var(--section-task-top-gap);
+  padding-top: var(--section-task-gap);
   padding-bottom: var(--section-task-gap);
 }
 
@@ -1072,7 +1067,6 @@ body {
 
 /* «Неразобранные» на notes.md: закреплён сверху и выделен, как в web Notes Lab */
 .section-header.inbox {
-  border-color: var(--accent-dim);
   background: linear-gradient(var(--accent-glow), var(--accent-glow)), var(--section-bar-bg);
   cursor: pointer;
 }
@@ -1539,7 +1533,6 @@ body {
 /* Dropping a task onto a section header */
 .section-header.drag-over-section {
   background: var(--accent-glow);
-  border-color: var(--accent-dim);
 }
 
 .tab.dragging { opacity: 0.35; }
