@@ -838,14 +838,14 @@ body {
   flex-shrink: 0;
 }
 
-/* Неподвижная панель закрывает всё до верхней видимой плашки, включая смену секций. */
+/* Неподвижная непрозрачная полоса закрывает уходящую плашку даже между scroll-событиями. */
 .toolbar::after {
   content: '';
   position: absolute;
   top: 100%;
   left: 0;
   right: 0;
-  height: var(--sticky-cover-height, calc(var(--task-list-top-pad) + var(--section-sticky-inset)));
+  height: var(--sticky-cover-height, calc(var(--task-list-top-pad) + var(--section-sticky-inset) + 35px));
   background: var(--bg);
 }
 
@@ -947,6 +947,21 @@ body {
   cursor: grab;
   user-select: none;
   transition: background 0.15s, border-color 0.15s;
+}
+
+/* Только верхняя актуальная плашка видна поверх неподвижной защитной полосы. */
+.section-header.sticky-cover-front { z-index: 3; }
+
+/* Сохранить слитную подложку выбранной секции под непрозрачной полосой. */
+.section-group.section-picker-target[data-collapsed="false"] .section-header.sticky-cover-front::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: -1px;
+  right: -1px;
+  height: 10px;
+  background: linear-gradient(var(--section-target-bg), var(--section-target-bg)), var(--bg);
+  pointer-events: none;
 }
 
 .section-content {

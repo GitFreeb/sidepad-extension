@@ -1564,12 +1564,16 @@ function scrollSectionToTop(section) {
   list.scrollTo({ top: targetTop, behavior: 'auto' });
 }
 
+let stickyCoverFront = null;
+
 function syncStickyHeaderCover() {
   const list = document.getElementById('taskList');
   const toolbar = document.querySelector('.toolbar');
   const listRect = list.getBoundingClientRect();
   const headers = list.querySelectorAll('.section-header');
   if (!headers.length) {
+    stickyCoverFront?.classList.remove('sticky-cover-front');
+    stickyCoverFront = null;
     toolbar.style.setProperty('--sticky-cover-height', '0px');
     return;
   }
@@ -1579,16 +1583,31 @@ function syncStickyHeaderCover() {
     + (parseFloat(getComputedStyle(headers[0]).top) || 0);
   let first = null;
   let next = null;
+  let outgoingHeight = 0;
   for (const header of headers) {
     const rect = header.getBoundingClientRect();
-    if (rect.top < listRect.top || rect.top >= listRect.bottom || rect.bottom <= listRect.top) continue;
-    if (!first) first = rect;
-    else { next = rect; break; }
+    if (rect.top >= listRect.bottom || rect.bottom <= listRect.top) continue;
+    if (rect.top < listRect.top) {
+      outgoingHeight = Math.max(outgoingHeight, rect.height);
+      continue;
+    }
+    if (!first) first = { header, rect };
+    else { next = { header, rect }; break; }
   }
 
-  // Уходящая плашка не должна проступать над входящей секцией.
-  const visible = first?.top < stickyTop - 0.5 && next ? next : first;
-  toolbar.style.setProperty('--sticky-cover-height', `${visible ? visible.top - listRect.top : 0}px`);
+  // Маска не следует за движущимся краем: она всегда закрывает уходящую плашку.
+  const visible = first?.rect.top < stickyTop - 0.5 && next ? next : first;
+  const coverHeight = Math.ceil(stickyTop - listRect.top
+    + Math.max(outgoingHeight, first?.rect.height || 0, visible?.rect.height || 0)) + 10;
+  const height = `${coverHeight}px`;
+  if (toolbar.style.getPropertyValue('--sticky-cover-height') !== height) {
+    toolbar.style.setProperty('--sticky-cover-height', height);
+  }
+  if (stickyCoverFront !== visible?.header) {
+    stickyCoverFront?.classList.remove('sticky-cover-front');
+    stickyCoverFront = visible?.header || null;
+    stickyCoverFront?.classList.add('sticky-cover-front');
+  }
 }
 
 const taskListForCover = document.getElementById('taskList');

@@ -870,11 +870,13 @@ test('the top edge hides previous content throughout a section handoff', { skip 
   await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 640, deviceScaleFactor: 1, mobile: false });
 
   for (const name of ['S1', 'S2', 'S3']) {
-    const result = await page.evaluate(`(async () => {
+    for (const targetGap of [44, 23, 11]) {
+      const result = await page.evaluate(`(async () => {
       const list = document.getElementById('taskList');
       const header = __t.section('${name}');
       const top = list.getBoundingClientRect().top;
-      list.scrollTop += header.getBoundingClientRect().top - top - 35;
+      list.scrollTop = 0;
+      list.scrollTop += header.getBoundingClientRect().top - top - ${targetGap};
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const rect = header.getBoundingClientRect();
       const x = rect.left + 40;
@@ -885,13 +887,19 @@ test('the top edge hides previous content throughout a section handoff', { skip 
       }
       return {
         gap: rect.top - top,
+        coverHeight: parseFloat(getComputedStyle(document.querySelector('.toolbar'), '::after').height),
+        headerHeight: rect.height,
+        front: header.classList.contains('sticky-cover-front'),
         exposed,
-        headerVisible: Boolean(document.elementFromPoint(x, rect.top + 3)?.closest('.section-header')),
+        headerVisible: document.elementFromPoint(x, rect.top + 3)?.closest('.section-header') === header,
       };
     })()`);
-    assert.ok(result.gap >= 25 && result.gap <= 50, JSON.stringify({ name, ...result }));
-    assert.equal(result.exposed, null, JSON.stringify({ name, ...result }));
-    assert.equal(result.headerVisible, true, JSON.stringify({ name, ...result }));
+      assert.ok(Math.abs(result.gap - targetGap) <= 1, JSON.stringify({ name, targetGap, ...result }));
+      assert.ok(result.coverHeight >= result.headerHeight + 10, JSON.stringify({ name, targetGap, ...result }));
+      assert.equal(result.front, true, JSON.stringify({ name, targetGap, ...result }));
+      assert.equal(result.exposed, null, JSON.stringify({ name, targetGap, ...result }));
+      assert.equal(result.headerVisible, true, JSON.stringify({ name, targetGap, ...result }));
+    }
   }
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
