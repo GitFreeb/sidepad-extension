@@ -21,9 +21,11 @@
   --tab-bg:        #1c1c1e;
   --tab-active:    #2c2c2e;
   --section-target-bg: rgba(255, 255, 255, 0.045);
+  --section-bar-bg: #333335;
+  --section-divider: #515154;
   --task-list-top-pad: 6px;
   --section-sticky-inset: 4px;
-  --section-task-gap: 2px;
+  --section-task-gap: 0px;
   --sticky-cover-overhang: 5px;
 
   --radius: 6px;
@@ -53,6 +55,8 @@
   --tab-bg:        #ede8da;
   --tab-active:    #f5f0e6;
   --section-target-bg: rgba(72, 96, 58, 0.06);
+  --section-bar-bg: #e8e2d5;
+  --section-divider: #cdc6b4;
 }
 
 [data-theme="light"] .task-text {
@@ -932,17 +936,19 @@ body {
 
 /* Без схлопывания margin плашки сквозь обёртку: её верх — точка отсчёта прокрутки */
 .section-group { display: flow-root; }
+.section-group + .section-group { margin-top: 18px; }
 
 /* Section headers */
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: var(--section-task-gap) 10px;
-  padding: 6px 12px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  margin: 0;
+  padding: 6px 14px;
+  background: var(--section-bar-bg);
+  border: 0;
+  border-bottom: 1px solid var(--section-divider);
+  border-radius: 0;
   position: sticky;
   top: var(--section-sticky-inset);
   z-index: 1;
@@ -956,13 +962,13 @@ body {
 /* Только верхняя актуальная плашка видна поверх неподвижной защитной полосы. */
 .section-header.sticky-cover-front { z-index: 3; }
 
-/* Восстановить верх первых пикселей задачи под маской, оставив единый зазор. */
+/* Восстановить верх первых пикселей задачи под маской без разрыва с заголовком. */
 .section-header.sticky-cover-front::after {
   content: '';
   position: absolute;
   top: calc(100% + var(--section-task-gap));
-  left: -1px;
-  right: -1px;
+  left: 0;
+  right: 0;
   height: calc(var(--sticky-cover-overhang) - var(--section-task-gap));
   background: var(--bg);
   pointer-events: none;
@@ -972,20 +978,19 @@ body {
   background: linear-gradient(var(--section-target-bg), var(--section-target-bg)), var(--bg);
 }
 
-/* Первой задаче сохранить подсветку и левую линию сразу после зазора. */
+/* Первой задаче сохранить подсветку и тонкую левую линию под заголовком. */
 .section-header.sticky-cover-front:has(+ .section-content > .section-tasks > .task-item:first-child:hover)::after {
   background: var(--hover);
-  border-left: 2px solid var(--accent-dim);
+  border-left: 1px solid var(--accent-dim);
 }
 
 .section-content {
-  margin: 0 10px;
+  margin: 0;
 }
 
-/* Выбранная секция сохраняет свою подложку, но её края отделены общим зазором. */
+/* Подложка выбранной секции занимает ту же ширину, что и заголовок. */
 .section-group.section-picker-target[data-collapsed="false"] .section-content {
   background: var(--section-target-bg);
-  border-radius: var(--radius);
 }
 
 .section-header:hover {
@@ -995,7 +1000,7 @@ body {
 /* «Неразобранные» на notes.md: закреплён сверху и выделен, как в web Notes Lab */
 .section-header.inbox {
   border-color: var(--accent-dim);
-  background: linear-gradient(var(--accent-glow), var(--accent-glow)), var(--surface2);
+  background: linear-gradient(var(--accent-glow), var(--accent-glow)), var(--section-bar-bg);
   cursor: pointer;
 }
 
@@ -1105,7 +1110,7 @@ body {
   column-gap: 6px;
   padding: 6px 4px;
   transition: background 0.1s;
-  border-left: 2px solid transparent;
+  border-left: 1px solid transparent;
   position: relative;
 }
 
