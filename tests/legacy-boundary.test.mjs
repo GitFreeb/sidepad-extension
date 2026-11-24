@@ -29,23 +29,26 @@ test('there is a single Sidepad UI: no separate API application remains', async 
   assert.doesNotMatch(html, /add via API|api-task-form|api-document/);
 });
 
-test('square sections keep balanced spacing and tint both gaps of the selected section', async () => {
+test('square sections keep 2px gaps and tint both gaps of the selected section', async () => {
   const css = await read('popup.css');
   const source = await read('popup.js');
 
   assert.match(source, /section-last/);
   assert.match(source, /data-collapsed="\$\{isCollapsed\}"/);
   assert.match(css, /--section-task-gap:\s*2px;/);
-  assert.match(css, /--section-task-top-gap:\s*3px;/);
   assert.doesNotMatch(css, /\.section-group \+ \.section-group\s*\{[^}]*margin-top:/s);
-  assert.match(css, /\.section-header\s*\{[^}]*margin:\s*var\(--section-task-gap\) 0 var\(--section-task-top-gap\);[^}]*border-bottom:\s*1px solid var\(--section-divider\);[^}]*border-radius:\s*0;/s);
+  const headerStyle = css.match(/\.section-header\s*\{([^}]*)\}/s)?.[1] || '';
+  assert.match(headerStyle, /margin:\s*var\(--section-task-gap\) 0;/);
+  assert.match(headerStyle, /border:\s*0;/);
+  assert.doesNotMatch(headerStyle, /border-bottom:/);
+  assert.match(headerStyle, /border-radius:\s*0;/);
   assert.match(css, /\.section-content\s*\{\s*margin:\s*0;/);
   assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-content\s*\{[^}]*background:\s*var\(--section-target-bg\);/s);
   assert.match(css, /\.task-item\s*\{[^}]*border-left:\s*1px solid transparent;/s);
-  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-header\s*\{[^}]*margin-bottom:\s*0;[^}]*border-bottom-color:\s*transparent;/s);
-  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-content\s*\{[^}]*padding-top:\s*var\(--section-task-top-gap\);[^}]*padding-bottom:\s*var\(--section-task-gap\);/s);
+  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-header\s*\{[^}]*margin-bottom:\s*0;/s);
+  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-content\s*\{[^}]*padding-top:\s*var\(--section-task-gap\);[^}]*padding-bottom:\s*var\(--section-task-gap\);/s);
   assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \+ \.section-group \.section-header\s*\{[^}]*margin-top:\s*0;/s);
-  assert.match(css, /\.section-header\.sticky-cover-front\s*\{[^}]*box-shadow:\s*0 var\(--section-task-top-gap\) 0 var\(--section-target-solid\);/s);
+  assert.match(css, /\.section-header\.sticky-cover-front\s*\{[^}]*box-shadow:\s*0 var\(--section-task-gap\) 0 var\(--section-target-solid\);/s);
   assert.doesNotMatch(css, /calc\(var\(--radius\) \+ 1px\)/);
 });
 
