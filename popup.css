@@ -18,6 +18,8 @@
   --danger:        #ff453a;
   --link:          #f0a93b;
   --scrollbar:     #3a3a3c;
+  --overlay-thumb: rgba(230, 237, 243, 0.35);
+  --overlay-thumb-active: rgba(230, 237, 243, 0.55);
   --tab-bg:        #1c1c1e;
   --tab-active:    #2c2c2e;
   --section-target-bg: rgba(255, 255, 255, 0.045);
@@ -25,7 +27,7 @@
   --section-divider: #515154;
   --task-list-top-pad: 6px;
   --section-sticky-inset: 4px;
-  --section-task-gap: 0px;
+  --section-task-gap: 2px;
   --sticky-cover-overhang: 5px;
 
   --radius: 6px;
@@ -52,6 +54,8 @@
   --danger:        #c0392b;
   --link:          #48603a;
   --scrollbar:     #cdc6b4;
+  --overlay-thumb: rgba(20, 28, 39, 0.30);
+  --overlay-thumb-active: rgba(20, 28, 39, 0.50);
   --tab-bg:        #ede8da;
   --tab-active:    #f5f0e6;
   --section-target-bg: rgba(72, 96, 58, 0.06);
@@ -913,8 +917,15 @@ body {
 
 
 /* ── Task list ── */
-.task-list {
+.task-viewport {
   flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.task-list {
+  width: 100%;
+  height: 100%;
   list-style: none;
   overflow-y: auto;
   padding: var(--task-list-top-pad) 0 8px;
@@ -922,6 +933,66 @@ body {
 
 .task-list::-webkit-scrollbar { width: 3px; }
 .task-list::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
+
+/* Скроллбар поверх полотна, без постоянной полосы справа. */
+.task-viewport.overlay-scrollbar-ready .task-list { scrollbar-width: none; }
+.task-viewport.overlay-scrollbar-ready .task-list::-webkit-scrollbar { width: 0; height: 0; }
+
+.task-scrollbar {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 200ms ease-out;
+}
+
+.task-scrollbar.is-visible,
+.task-scrollbar.is-dragging,
+.task-scrollbar:focus-visible { opacity: 1; }
+
+.task-scrollbar:focus { outline: none; }
+
+.task-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 14px;
+  min-height: 28px;
+  cursor: ns-resize;
+  touch-action: none;
+  will-change: transform;
+}
+
+.task-scrollbar.is-visible .task-scrollbar-thumb,
+.task-scrollbar.is-dragging .task-scrollbar-thumb { pointer-events: auto; }
+
+.task-scrollbar-thumb::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 2px;
+  bottom: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--overlay-thumb);
+  transition: background-color 150ms ease-out;
+}
+
+.task-scrollbar.is-visible .task-scrollbar-thumb:hover::after,
+.task-scrollbar:focus-visible .task-scrollbar-thumb::after,
+.task-scrollbar.is-dragging .task-scrollbar-thumb::after {
+  background: var(--overlay-thumb-active);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-scrollbar,
+  .task-scrollbar-thumb::after { transition: none; }
+}
 
 /* Section groups: границы, в которых липнет плашка секции */
 .section-group,
@@ -936,14 +1007,13 @@ body {
 
 /* Без схлопывания margin плашки сквозь обёртку: её верх — точка отсчёта прокрутки */
 .section-group { display: flow-root; }
-.section-group + .section-group { margin-top: 18px; }
 
 /* Section headers */
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 0;
+  margin: var(--section-task-gap) 0;
   padding: 6px 14px;
   background: var(--section-bar-bg);
   border: 0;

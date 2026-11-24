@@ -29,20 +29,34 @@ test('there is a single Sidepad UI: no separate API application remains', async 
   assert.doesNotMatch(html, /add via API|api-task-form|api-document/);
 });
 
-test('section headers and task canvas form full-width square strips', async () => {
+test('full-width square sections retain the same 2px gaps in every state', async () => {
   const css = await read('popup.css');
   const source = await read('popup.js');
 
   assert.match(source, /section-last/);
   assert.match(source, /data-collapsed="\$\{isCollapsed\}"/);
-  assert.match(css, /--section-task-gap:\s*0px;/);
-  assert.match(css, /\.section-group \+ \.section-group\s*\{\s*margin-top:\s*18px;/);
-  assert.match(css, /\.section-header\s*\{[^}]*margin:\s*0;[^}]*border-bottom:\s*1px solid var\(--section-divider\);[^}]*border-radius:\s*0;/s);
+  assert.match(css, /--section-task-gap:\s*2px;/);
+  assert.doesNotMatch(css, /\.section-group \+ \.section-group\s*\{[^}]*margin-top:/s);
+  assert.match(css, /\.section-header\s*\{[^}]*margin:\s*var\(--section-task-gap\) 0;[^}]*border-bottom:\s*1px solid var\(--section-divider\);[^}]*border-radius:\s*0;/s);
   assert.match(css, /\.section-content\s*\{\s*margin:\s*0;/);
   assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-content\s*\{[^}]*background:\s*var\(--section-target-bg\);/s);
   assert.match(css, /\.task-item\s*\{[^}]*border-left:\s*1px solid transparent;/s);
   assert.doesNotMatch(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-header\s*\{[^}]*margin-bottom:\s*0;/s);
   assert.doesNotMatch(css, /calc\(var\(--radius\) \+ 1px\)/);
+});
+
+test('overlay scrollbar is packaged and keeps native scrolling as fallback', async () => {
+  const css = await read('popup.css');
+  const html = await read('popup.html');
+  const script = await read('popup-scrollbar.js');
+  const pkg = JSON.parse(await read('sidepad-package.json'));
+
+  assert.ok(pkg.files.includes('popup-scrollbar.js'));
+  assert.match(html, /id="taskViewport"[\s\S]*id="taskList"[\s\S]*id="taskScrollbar"/);
+  assert.match(html, /<script src="popup-scrollbar\.js"><\/script>/);
+  assert.match(css, /\.task-viewport\.overlay-scrollbar-ready \.task-list\s*\{\s*scrollbar-width:\s*none;/);
+  assert.match(script, /MutationObserver/);
+  assert.match(script, /idleDelay = 800/);
 });
 
 test('toolbar cover stays opaque above the scrolling task list', async () => {

@@ -127,14 +127,22 @@
       <button id="clearDoneBtn" class="btn-clear">✕ очистить</button>
     </div>
 
-    <!-- Task list -->
-    <ul class="task-list" id="taskList"></ul>
+    <!-- Task list and disappearing overlay scrollbar -->
+    <div class="task-viewport" id="taskViewport">
+      <ul class="task-list" id="taskList"></ul>
+      <div class="task-scrollbar" id="taskScrollbar" role="scrollbar"
+           aria-label="Прокрутка задач" aria-controls="taskList" aria-orientation="vertical"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="-1" hidden>
+        <div class="task-scrollbar-thumb"></div>
+      </div>
+    </div>
 
 
   </div>
 
   <div id="toast" class="toast"></div>
   <script src="popup.js"></script>
+  <script src="popup-scrollbar.js"></script>
   <script type="module" src="popup-api.js"></script>
 </body>
 </html>

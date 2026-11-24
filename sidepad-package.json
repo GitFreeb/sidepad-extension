@@ -24,6 +24,7 @@
     "popup.css",
     "popup.html",
     "popup.js",
+    "popup-scrollbar.js",
     "sidepad-package.json"
   ]
 }

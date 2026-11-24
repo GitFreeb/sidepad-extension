@@ -118,7 +118,7 @@ test('task cards give text the full control width with compact aligned controls 
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
-test('first task hover meets the header with a thin left accent', { skip }, async () => {
+test('first task hover keeps a 2px gap and thin left accent', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 640, deviceScaleFactor: 1, mobile: false });
   await page.evaluate(`(() => {
@@ -153,13 +153,52 @@ test('first task hover meets the header with a thin left accent', { skip }, asyn
   })()`);
   assert.equal(state.front, true, JSON.stringify(state));
   assert.equal(state.hovered, true, JSON.stringify(state));
-  assert.ok(Math.abs(state.gap) <= 1, JSON.stringify(state));
+  assert.ok(Math.abs(state.gap - 2) <= 1, JSON.stringify(state));
   assert.ok(state.coverHeight > 0, JSON.stringify(state));
   assert.equal(state.coverBackground, state.taskBackground, JSON.stringify(state));
   assert.equal(state.coverBorder, state.taskBorder, JSON.stringify(state));
   assert.equal(state.coverBorderWidth, '1px', JSON.stringify(state));
   assert.equal(state.taskBorderWidth, '1px', JSON.stringify(state));
   await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});
+
+test('task scrollbar overlays the full-width section and fades after scrolling', { skip }, async () => {
+  const manyTasks = Array.from({ length: 24 }, (_, i) => `item ${i + 1}`);
+  await reloadWithStorage(page, {
+    tabs: [legacyTab('tab_long', 'long', [['Alpha', manyTasks]])],
+    activeTabId: 'tab_long',
+  });
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 640, deviceScaleFactor: 1, mobile: false });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const state = await page.evaluate(`(() => {
+    const list = document.getElementById('taskList');
+    const viewport = document.getElementById('taskViewport');
+    const overlay = document.getElementById('taskScrollbar');
+    const header = list.querySelector('.section-header');
+    return {
+      ready: viewport.classList.contains('overlay-scrollbar-ready'),
+      overflow: list.scrollHeight > list.clientHeight,
+      hidden: overlay.hidden,
+      gutter: list.offsetWidth - list.clientWidth,
+      scrollbarWidth: getComputedStyle(list).scrollbarWidth,
+      rightDelta: Math.abs(overlay.getBoundingClientRect().right - header.getBoundingClientRect().right),
+    };
+  })()`);
+  assert.equal(state.ready, true);
+  assert.equal(state.overflow, true);
+  assert.equal(state.hidden, false);
+  assert.equal(state.gutter, 0);
+  assert.equal(state.scrollbarWidth, 'none');
+  assert.ok(state.rightDelta <= 1, JSON.stringify(state));
+
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
+  await page.evaluate(`document.getElementById('taskList').scrollTop = 120`);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(await page.evaluate(`document.getElementById('taskScrollbar').classList.contains('is-visible')`), true);
+  await new Promise((resolve) => setTimeout(resolve, 1050));
+  assert.equal(await page.evaluate(`document.getElementById('taskScrollbar').classList.contains('is-visible')`), false);
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
@@ -311,10 +350,10 @@ test('section selection reveals its header at the top with uniform gaps and a sh
   assert.equal(state.bodyBackground, 'rgba(0, 0, 0, 0)');
   assert.equal(state.contentCanvasBackground, state.targetBackground);
   assert.equal(state.nextHeaderUnderlay, 'none');
-  assert.equal(state.headerTopRadius, '6px');
-  assert.equal(state.headerBottomRadius, '6px');
-  assert.equal(state.nextHeaderTopRadius, '6px');
-  assert.equal(state.nextHeaderBottomRadius, '6px');
+  assert.equal(state.headerTopRadius, '0px');
+  assert.equal(state.headerBottomRadius, '0px');
+  assert.equal(state.nextHeaderTopRadius, '0px');
+  assert.equal(state.nextHeaderBottomRadius, '0px');
   assert.ok(state.contentBackgrounds.every((background) => background === 'rgba(0, 0, 0, 0)'));
   assert.ok(state.leftDelta <= 1, `content canvas starts ${state.leftDelta}px away from the header`);
   assert.ok(state.rightDelta <= 1, `content canvas ends ${state.rightDelta}px away from the header`);
@@ -345,10 +384,10 @@ test('section selection reveals its header at the top with uniform gaps and a sh
   })()`);
   assert.deepEqual(lastState, {
     lastClass: true,
-    headerTopRadius: '6px',
-    headerBottomRadius: '6px',
-    contentTopRadius: '6px',
-    contentBottomRadius: '6px',
+    headerTopRadius: '0px',
+    headerBottomRadius: '0px',
+    contentTopRadius: '0px',
+    contentBottomRadius: '0px',
   });
 
   await page.send('Emulation.clearDeviceMetricsOverride');
