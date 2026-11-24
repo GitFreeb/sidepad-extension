@@ -23,6 +23,8 @@
   --section-target-bg: rgba(255, 255, 255, 0.045);
   --task-list-top-pad: 6px;
   --section-sticky-inset: 4px;
+  --section-task-gap: 2px;
+  --sticky-cover-overhang: 5px;
 
   --radius: 6px;
   --font-ui:   -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -936,7 +938,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 8px 10px 2px;
+  margin: var(--section-task-gap) 10px;
   padding: 6px 12px;
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -949,23 +951,29 @@ body {
   transition: background 0.15s, border-color 0.15s;
 }
 
+.section-group:first-child .section-header { margin-top: 8px; }
+
 /* Только верхняя актуальная плашка видна поверх неподвижной защитной полосы. */
 .section-header.sticky-cover-front { z-index: 3; }
 
-/* Сохранить слитную подложку выбранной секции под непрозрачной полосой. */
-.section-group.section-picker-target[data-collapsed="false"] .section-header.sticky-cover-front::after {
+/* Восстановить верх первых пикселей задачи под маской, оставив единый зазор. */
+.section-header.sticky-cover-front::after {
   content: '';
   position: absolute;
-  top: 100%;
+  top: calc(100% + var(--section-task-gap));
   left: -1px;
   right: -1px;
-  height: 10px;
-  background: linear-gradient(var(--section-target-bg), var(--section-target-bg)), var(--bg);
+  height: calc(var(--sticky-cover-overhang) - var(--section-task-gap));
+  background: var(--bg);
   pointer-events: none;
 }
 
-/* Верх первой задачи находится под этим слоем: продолжить её hover до плашки. */
-.section-group.section-picker-target[data-collapsed="false"] .section-header.sticky-cover-front:has(+ .section-content > .section-tasks > .task-item:first-child:hover)::after {
+.section-group.section-picker-target[data-collapsed="false"] .section-header.sticky-cover-front::after {
+  background: linear-gradient(var(--section-target-bg), var(--section-target-bg)), var(--bg);
+}
+
+/* Первой задаче сохранить подсветку и левую линию сразу после зазора. */
+.section-header.sticky-cover-front:has(+ .section-content > .section-tasks > .task-item:first-child:hover)::after {
   background: var(--hover);
   border-left: 2px solid var(--accent-dim);
 }
@@ -974,24 +982,10 @@ body {
   margin: 0 10px;
 }
 
-/* Выбранная секция — единая составная форма без фоновых подслоёв:
-   заголовок закрывает верх, content — середину, следующая плашка — низ. */
-.section-group.section-picker-target[data-collapsed="false"] .section-header {
-  margin-bottom: 0;
-  border-radius: var(--radius) var(--radius) 0 0;
-}
-
+/* Выбранная секция сохраняет свою подложку, но её края отделены общим зазором. */
 .section-group.section-picker-target[data-collapsed="false"] .section-content {
   background: var(--section-target-bg);
-}
-
-.section-group.section-picker-target[data-collapsed="false"] + .section-group .section-header {
-  margin-top: 0;
-  border-radius: 0 0 var(--radius) var(--radius);
-}
-
-.section-group.section-picker-target.section-last[data-collapsed="false"] .section-content {
-  border-radius: 0 0 var(--radius) var(--radius);
+  border-radius: var(--radius);
 }
 
 .section-header:hover {

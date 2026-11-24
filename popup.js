@@ -1578,9 +1578,11 @@ function syncStickyHeaderCover() {
     return;
   }
 
+  const listStyle = getComputedStyle(list);
   const stickyTop = listRect.top
-    + (parseFloat(getComputedStyle(list).paddingTop) || 0)
+    + (parseFloat(listStyle.paddingTop) || 0)
     + (parseFloat(getComputedStyle(headers[0]).top) || 0);
+  const overhang = parseFloat(listStyle.getPropertyValue('--sticky-cover-overhang')) || 5;
   let first = null;
   let next = null;
   let outgoingHeight = 0;
@@ -1598,7 +1600,7 @@ function syncStickyHeaderCover() {
   // Маска не следует за движущимся краем: она всегда закрывает уходящую плашку.
   const visible = first?.rect.top < stickyTop - 0.5 && next ? next : first;
   const coverHeight = Math.ceil(stickyTop - listRect.top
-    + Math.max(outgoingHeight, first?.rect.height || 0, visible?.rect.height || 0)) + 10;
+    + Math.max(outgoingHeight, first?.rect.height || 0, visible?.rect.height || 0)) + overhang;
   const height = `${coverHeight}px`;
   if (toolbar.style.getPropertyValue('--sticky-cover-height') !== height) {
     toolbar.style.setProperty('--sticky-cover-height', height);
