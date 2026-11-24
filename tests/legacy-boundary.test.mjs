@@ -29,7 +29,7 @@ test('there is a single Sidepad UI: no separate API application remains', async 
   assert.doesNotMatch(html, /add via API|api-task-form|api-document/);
 });
 
-test('full-width square sections retain the same 2px gaps in every state', async () => {
+test('square sections keep 2px spacing and tint both gaps of the selected section', async () => {
   const css = await read('popup.css');
   const source = await read('popup.js');
 
@@ -41,11 +41,14 @@ test('full-width square sections retain the same 2px gaps in every state', async
   assert.match(css, /\.section-content\s*\{\s*margin:\s*0;/);
   assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-content\s*\{[^}]*background:\s*var\(--section-target-bg\);/s);
   assert.match(css, /\.task-item\s*\{[^}]*border-left:\s*1px solid transparent;/s);
-  assert.doesNotMatch(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-header\s*\{[^}]*margin-bottom:\s*0;/s);
+  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-header\s*\{[^}]*margin-bottom:\s*0;[^}]*border-bottom-color:\s*transparent;/s);
+  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \.section-content\s*\{[^}]*padding-top:\s*var\(--section-task-gap\);[^}]*padding-bottom:\s*var\(--section-task-gap\);/s);
+  assert.match(css, /\.section-group\.section-picker-target\[data-collapsed="false"\] \+ \.section-group \.section-header\s*\{[^}]*margin-top:\s*0;/s);
+  assert.match(css, /\.section-header\.sticky-cover-front\s*\{[^}]*box-shadow:\s*0 var\(--section-task-gap\) 0 var\(--section-target-solid\);/s);
   assert.doesNotMatch(css, /calc\(var\(--radius\) \+ 1px\)/);
 });
 
-test('overlay scrollbar is packaged and keeps native scrolling as fallback', async () => {
+test('noninteractive scroll indicator is packaged and keeps native scrolling as fallback', async () => {
   const css = await read('popup.css');
   const html = await read('popup.html');
   const script = await read('popup-scrollbar.js');
@@ -53,10 +56,13 @@ test('overlay scrollbar is packaged and keeps native scrolling as fallback', asy
 
   assert.ok(pkg.files.includes('popup-scrollbar.js'));
   assert.match(html, /id="taskViewport"[\s\S]*id="taskList"[\s\S]*id="taskScrollbar"/);
+  assert.match(html, /id="taskScrollbar" aria-hidden="true" hidden/);
   assert.match(html, /<script src="popup-scrollbar\.js"><\/script>/);
   assert.match(css, /\.task-viewport\.overlay-scrollbar-ready \.task-list\s*\{\s*scrollbar-width:\s*none;/);
   assert.match(script, /MutationObserver/);
   assert.match(script, /idleDelay = 800/);
+  assert.doesNotMatch(script, /pointerdown|keydown|setPointerCapture/);
+  assert.match(css, /\.task-scrollbar-thumb::after\s*\{[^}]*width:\s*2px;/s);
 });
 
 test('toolbar cover stays opaque above the scrolling task list', async () => {

@@ -127,12 +127,10 @@
       <button id="clearDoneBtn" class="btn-clear">✕ очистить</button>
     </div>
 
-    <!-- Task list and disappearing overlay scrollbar -->
+    <!-- Task list and disappearing position indicator -->
     <div class="task-viewport" id="taskViewport">
       <ul class="task-list" id="taskList"></ul>
-      <div class="task-scrollbar" id="taskScrollbar" role="scrollbar"
-           aria-label="Прокрутка задач" aria-controls="taskList" aria-orientation="vertical"
-           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="-1" hidden>
+      <div class="task-scrollbar" id="taskScrollbar" aria-hidden="true" hidden>
         <div class="task-scrollbar-thumb"></div>
       </div>
     </div>
