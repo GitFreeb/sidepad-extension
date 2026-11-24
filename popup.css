@@ -1249,7 +1249,9 @@ body {
   cursor: pointer;
   border: 0;
   background: transparent;
-  position: relative;
+  position: absolute;
+  top: 8px;
+  left: 4px;
 }
 
 .task-checkbox::before {
@@ -1295,7 +1297,7 @@ body {
 .task-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   min-height: 18px;
   margin-bottom: 4px;
 }
@@ -1486,8 +1488,10 @@ body {
 .drag-handle {
   display: grid;
   place-items: center;
-  align-self: center;
-  justify-self: start;
+  position: absolute;
+  top: max(38px, 50%);
+  left: 4px;
+  transform: translateY(-50%);
   width: 14px;
   height: 18px;
   color: var(--text-dim);
