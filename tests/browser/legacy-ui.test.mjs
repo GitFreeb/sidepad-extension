@@ -118,6 +118,47 @@ test('task cards give text the full control width with compact aligned controls 
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
+test('first task hover joins the selected section header without a stripe', { skip }, async () => {
+  await reloadWithStorage(page, seed());
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 640, deviceScaleFactor: 1, mobile: false });
+  await page.evaluate(`(() => {
+    __t.click('#sectionSelect');
+    document.querySelector('#sectionSelectList [data-value="Alpha"]')
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  })()`);
+  const point = await page.evaluate(`(() => {
+    const rect = __t.task('one').getBoundingClientRect();
+    return { x: rect.left + 40, y: rect.top + 20 };
+  })()`);
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  const state = await page.evaluate(`(() => {
+    const header = __t.section('Alpha');
+    const task = __t.task('one');
+    const cover = getComputedStyle(header, '::after');
+    const taskStyle = getComputedStyle(task);
+    return {
+      front: header.classList.contains('sticky-cover-front'),
+      hovered: task.matches(':hover'),
+      gap: task.getBoundingClientRect().top - header.getBoundingClientRect().bottom,
+      coverHeight: parseFloat(cover.height),
+      coverBackground: cover.backgroundColor,
+      coverBorder: cover.borderLeftColor,
+      taskBackground: taskStyle.backgroundColor,
+      taskBorder: taskStyle.borderLeftColor,
+    };
+  })()`);
+  assert.equal(state.front, true, JSON.stringify(state));
+  assert.equal(state.hovered, true, JSON.stringify(state));
+  assert.ok(Math.abs(state.gap) <= 1, JSON.stringify(state));
+  assert.ok(state.coverHeight > 0, JSON.stringify(state));
+  assert.equal(state.coverBackground, state.taskBackground, JSON.stringify(state));
+  assert.equal(state.coverBorder, state.taskBorder, JSON.stringify(state));
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
+  await page.send('Emulation.clearDeviceMetricsOverride');
+});
+
 test('section picker shows and refreshes incomplete over total task counts', { skip }, async () => {
   await reloadWithStorage(page, seed());
   const pickerCounts = () => page.evaluate(`Object.fromEntries(

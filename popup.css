@@ -964,6 +964,12 @@ body {
   pointer-events: none;
 }
 
+/* Верх первой задачи находится под этим слоем: продолжить её hover до плашки. */
+.section-group.section-picker-target[data-collapsed="false"] .section-header.sticky-cover-front:has(+ .section-content > .section-tasks > .task-item:first-child:hover)::after {
+  background: var(--hover);
+  border-left: 2px solid var(--accent-dim);
+}
+
 .section-content {
   margin: 0 10px;
 }
