@@ -118,7 +118,7 @@ test('task cards give text the full control width with compact aligned controls 
   await page.send('Emulation.clearDeviceMetricsOverride');
 });
 
-test('first task hover joins the selected section header without a stripe', { skip }, async () => {
+test('first task hover keeps the section gap and left accent', { skip }, async () => {
   await reloadWithStorage(page, seed());
   await page.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 640, deviceScaleFactor: 1, mobile: false });
   await page.evaluate(`(() => {
@@ -151,7 +151,7 @@ test('first task hover joins the selected section header without a stripe', { sk
   })()`);
   assert.equal(state.front, true, JSON.stringify(state));
   assert.equal(state.hovered, true, JSON.stringify(state));
-  assert.ok(Math.abs(state.gap) <= 1, JSON.stringify(state));
+  assert.ok(Math.abs(state.gap - 2) <= 1, JSON.stringify(state));
   assert.ok(state.coverHeight > 0, JSON.stringify(state));
   assert.equal(state.coverBackground, state.taskBackground, JSON.stringify(state));
   assert.equal(state.coverBorder, state.taskBorder, JSON.stringify(state));
@@ -228,7 +228,7 @@ test('keeps the successful target selected for rapid task capture', { skip }, as
   assert.equal(await page.evaluate(`document.getElementById('sectionSelectVal').textContent`), 'Named');
 });
 
-test('section selection reveals its header at the top and shades one flush content canvas', { skip }, async () => {
+test('section selection reveals its header at the top with uniform gaps and a shaded canvas', { skip }, async () => {
   const alphaTasks = Array.from({ length: 18 }, (_, index) => `alpha ${index + 1}`);
   await reloadWithStorage(page, {
     tabs: [legacyTab('tab_navigation', 'navigation', [
@@ -308,14 +308,14 @@ test('section selection reveals its header at the top and shades one flush conte
   assert.equal(state.contentCanvasBackground, state.targetBackground);
   assert.equal(state.nextHeaderUnderlay, 'none');
   assert.equal(state.headerTopRadius, '6px');
-  assert.equal(state.headerBottomRadius, '0px');
-  assert.equal(state.nextHeaderTopRadius, '0px');
+  assert.equal(state.headerBottomRadius, '6px');
+  assert.equal(state.nextHeaderTopRadius, '6px');
   assert.equal(state.nextHeaderBottomRadius, '6px');
   assert.ok(state.contentBackgrounds.every((background) => background === 'rgba(0, 0, 0, 0)'));
   assert.ok(state.leftDelta <= 1, `content canvas starts ${state.leftDelta}px away from the header`);
   assert.ok(state.rightDelta <= 1, `content canvas ends ${state.rightDelta}px away from the header`);
-  assert.ok(state.topGap <= 1, `content canvas starts ${state.topGap}px below the header`);
-  assert.ok(state.bottomGap <= 1, `content canvas ends ${state.bottomGap}px before the next header`);
+  assert.ok(Math.abs(state.topGap - 2) <= 1, `content canvas starts ${state.topGap}px below the header`);
+  assert.ok(Math.abs(state.bottomGap - 2) <= 1, `content canvas ends ${state.bottomGap}px before the next header`);
   assert.equal(state.taskDraft, 'draft task');
   assert.equal(state.linkDraft, 'https://example.test/draft');
   assert.deepEqual((await model())[1].tasks, ['[ ] beta one', '[ ] beta two']);
@@ -342,8 +342,8 @@ test('section selection reveals its header at the top and shades one flush conte
   assert.deepEqual(lastState, {
     lastClass: true,
     headerTopRadius: '6px',
-    headerBottomRadius: '0px',
-    contentTopRadius: '0px',
+    headerBottomRadius: '6px',
+    contentTopRadius: '6px',
     contentBottomRadius: '6px',
   });
 
