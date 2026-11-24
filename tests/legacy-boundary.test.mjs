@@ -49,7 +49,8 @@ test('toolbar cover stays opaque above the scrolling task list', async () => {
   assert.match(css, /--section-sticky-inset:\s*4px;/);
   assert.match(css, /\.toolbar\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*2;/s);
   assert.match(css, /\.toolbar::after\s*\{[^}]*content:\s*['"]['"];[^}]*position:\s*absolute;[^}]*top:\s*100%;[^}]*background:\s*var\(--bg\);/s);
-  assert.match(css, /height:\s*var\(--sticky-cover-height,\s*calc\(var\(--task-list-top-pad\) \+ var\(--section-sticky-inset\)\)\);/);
+  assert.match(css, /height:\s*var\(--sticky-cover-height,\s*calc\(var\(--task-list-top-pad\) \+ var\(--section-sticky-inset\) \+ 35px\)\);/);
+  assert.match(css, /\.section-header\.sticky-cover-front\s*\{\s*z-index:\s*3;/);
   assert.match(css, /\.task-list\s*\{[^}]*padding:\s*var\(--task-list-top-pad\) 0 8px;/s);
   assert.match(css, /\.section-header\s*\{[^}]*top:\s*var\(--section-sticky-inset\);/s);
 });
